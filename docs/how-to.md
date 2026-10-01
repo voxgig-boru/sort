@@ -34,14 +34,17 @@ mkdir -p /tmp/boru-source
 curl -fsSL "https://codeload.github.com/boru-lang/boru/tar.gz/$ref" \
   | tar -xz -C /tmp/boru-source --strip-components=1
 cd /tmp/boru-source/cmd/go
-GOWORK=off GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/boru" ./boru
+GOWORK=off GOFLAGS=-mod=mod go build \
+  -ldflags "-X github.com/boru-lang/boru/cmd/go.Version=$ref" \
+  -o "$HOME/.local/bin/boru" ./boru
 ```
 
-Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
+(This is the recipe the SessionStart hook and `test/divergence/run.sh`
+use.) Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
 
 ```bash
 boru -version
-# => boru 0.1.0-dev (git 64c5ab2f3aed)   (or the ref you built)
+# => boru 64c5ab2f3aed4a1d12a4cd71f759f34eed1962c1   (the ref you built)
 ```
 
 Run any script in this repo by passing its path:

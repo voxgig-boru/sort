@@ -1,15 +1,189 @@
 # Developer-experience report — building the `Sort` library in boru
 
 A field report from converting this repository into the `Sort`
-sorting-algorithms library: 25 algorithms and a set of comparators, built
-and verified against **`boru-lang/boru @ 12a44e0`** (the pinned commit; see
-`api.json`). Every snippet below was run against that build; the observed
-output is shown inline.
+sorting-algorithms library: 25 algorithms and a set of comparators,
+originally built and verified against **`boru-lang/boru @ 12a44e0`**, and
+since migrated to **boru main @ `64c5ab2`** (2026-10-01) — see the first
+section. Snippets in the historical sections were run against `12a44e0`
+and use its spellings (`/r`, `aql`, the interpreter/compiler split).
 
 The goal of this document is to save the next person time, and to give the
 `boru` maintainers a prioritized list of sharp edges. It is deliberately
 balanced — [§9](#9-what-worked-well) covers what made the build *pleasant*,
 which was a lot.
+
+## Migration to boru main @ 64c5ab2 (2026-10-01)
+
+The library had last been verified against boru `6185620` (2026-07-21),
+1,587 upstream commits earlier. This section records what the migration to
+**boru main @ `64c5ab2`** (2026-09-30) hit, what was worked around, and
+which upstream defects stay open. Everything below was executed against
+that build. **The sections after this one are the original field report
+(against `12a44e0`) and are kept as history** — several of their findings
+are fixed upstream (noted at the end of this section).
+
+**Result:** `sort.aql` and all five suites check with **0 errors, 0
+warnings** and every suite fully compiles and runs green on boru's single
+execution path (`test/divergence/run.sh` passes). No test expectation was
+changed.
+
+### Breaking changes hit
+
+| Change upstream | Effect here | Migration |
+|---|---|---|
+| **One execution path** (2026-09-19): compile to bytecode + VM, or `[boru/compile_failed]`; `--compile` / `--force-compile` / `--no-compile` and the `BORU_*COMPILE` env vars retired | the divergence harness compared interpreter vs byte compiler; `bench/run.sh` timed both | `test/divergence/run.sh` rewritten to gate on run (exit 0 + `all green`) + `boru check` (0 errors, suites **and** module); `bench/run.sh` has one column |
+| **`/r` renamed `/v`** (ADR-011, 2026-08-19); `ref` → `valof` | every `comp/r` forward and every export (`by-number: by-number/r`) | `/v` throughout; `mycmp/r` is now `undefined word: mycmp/r` |
+| **A bare name holding a function calls**, with no slot-typed exception (ADR-011 as amended 2026-08-17) | namespace comparators passed bare — `Sort.quick Sort.by-number xs`, `(Sort.by-number Sort.reverse)` — now *call* `by-number`: `uncalled_function: call to 'by-number' matched no signature` (baseline: `sort_smoke_test` check error; `sort_unit_test` refused with `code-body word test-test (Stage 2)`; two `sort_prop_spec` properties failed) | every comparator argument carries `/v`: `Sort.by-number/v`, `mycmp/v`, `cmp/v`. The docs' old rule "namespace comparators are already values — no `/r`" is **inverted**. (Observed leniency: a few positions still accept a bare *namespace member* on 64c5ab2 — `xs Sort.quick Sort.by-number end` and `(Sort.reverse Sort.by-number)` run — contrary to the ADR; the docs tell callers not to rely on it.) |
+| **Relative imports resolve against the importing file's directory** | suites imported `"./sort.aql"` relative to the cwd | suites import `"../sort.aql"`; `bench/sort_bench.aql` likewise |
+| **Receiver-first all-forward is rejected statically** | `Sort.quick [3 1 2] Sort.by-number/v` used to raise `signature_error` at run time | now `uncalled_function: call to 'quick-sort' matched no signature` from the pre-flight check; the run is blocked. Docs updated |
+| **`get` evaluates its key** | docs taught `e get code` / handler `[ get code ]` | `e.code`, or `dot code` / `get "code"` in a handler |
+| **`Test.check-prop` returns a PropertyResult** | a bare call left the Map on the stack | `sort_prop_test` hands each result to a `report` fn that prints `ok`/`FAIL` |
+| **Postfix print chains reorder** | the suites' `"---" print "fail count: " print Test.fail-count end print` summary dropped a line, and `0 Test.fail-count end Assert.equal end` compared against a stray stack value | one forward `print (…)` per line and `Assert.equal 0 (Test.fail-count)`. `Assert.equal` is `[expected actual]` in forward form (`expected foo, got bad_input`), so `sort_unit_test` now writes `Test.test NAME [ Assert.equal expected actual ]` and failure messages read the right way round |
+| **A Capitalised `def` binds a type** | `bench/sort_bench.aql`'s `def SMALL 200` made `iota SMALL` `[]`, and its all-stack `1000000 SMALL mkarr` bound `n` to a million (OOM-killed) | lowercase `n-small` / `n-large`, forward `mkarr 1000000 n-small` |
+| `boru check` false positives on fn values are fixed | `check` was advisory | `check` now gates (0 errors everywhere) |
+| boru has `while` | the bounded `iota` loops were written for its absence | kept (correct, compiled); comments updated |
+
+### Workarounds applied (each commented at its site; remove when fixed upstream)
+
+**1. A Function parameter read both bare and by `/v` in one body
+(NUR123's open remainder).** The recursive helpers invoked the comparator
+bare (`xi xj comp`) and forwarded it (`comp/v`). boru's compiler refuses
+that body — the error names NUR123, which `design/NUR-ARCHIVE.0.md`
+archives as FIXED while listing "a binding read both bare and by `/v`" as
+an unimplemented case still owed a fix:
+
+```boru
+# repro-bare-and-v.boru
+def go fn [[comp:Function n:Integer xs:List] [Integer] [
+  def c ((xs get 0) (xs get 1) comp)
+  def _r (if (n gt 0) [ (xs (n sub 1) comp/v go) ] [ 0 ])
+  n
+]]
+print ([3 1] 2 cmp/v go)
+# => error: [boru/compile_failed]: bytecode compilation FAILED: fn go: binding
+#    `comp` is read both bare and by /v in one body (one value ID, two dispatch
+#    semantics — NUR123) — this is a compiler defect ...
+```
+
+Worse, reached from inside an `each` body the same helper **compiles** and
+silently corrupts a *later, unrelated* call's loop state — in the suites,
+`Sort.heap` followed by `Sort.tim` returned the input unsorted (or raised
+`undefined word: ip`). Minimal repro (unrecorded upstream; possibly
+related to NUR361):
+
+```boru
+# repro-nur123-state-corruption.boru
+def sd fn [
+  [comp:Function n:Integer i:Integer arr:FlexList] [FlexList] [
+    def c ((arr get 0) (arr get 1) comp)
+    def _s (if (i lt n) [ arr n (i add 1) comp/v sd ] [ arr ])
+    arr
+  ]
+]
+def first fn [
+  [comp:Function] [Integer] [
+    def arr (flex [3 1 2])
+    def _b (iota 1 each [ var [[t] arr 0 2 comp/v sd 0 ] ])
+    0
+  ]
+]
+def second fn [
+  [n:Integer] [Integer] [
+    if (n lte 1) [ 0 ] [
+      def arr (flex [0 0 0])
+      def cnt (flex [0])
+      def _ (iota (n add 1) each [ var [[t] cnt set 0 ((cnt get 0) add 1) end drop 0 ] ])
+      def _u (arr size)
+      cnt get 0
+    ]
+  ]
+]
+print (cmp/v first)    # 0
+print (3 second)       # expected 4 — prints 1 (4 without the line above)
+```
+
+**Workaround:** every helper that forwards `comp/v` also invokes it through
+the value — `xi xj comp/v apply`, the same call — so the body reads `comp`
+only by `/v`. With that one-line change the repro above prints `4`.
+Sorts that never forward the comparator keep the bare `xi xj comp`.
+
+**2. A comparator that reads an imported namespace, applied as a fn value
+for a caller without that import.** `Sort.case-insensitive` called
+`StringUtil.lower` directly; applied by a sort on behalf of a script that
+had not imported `boru:string-util`, it raised
+`undefined word: StringUtil`. Unrecorded upstream:
+
+```boru
+# repro-ns-import/m.boru
+import "boru:string-util"
+def low fn [[b:String a:String] [Integer] [ ((a StringUtil.lower) (b StringUtil.lower) cmp) ]]
+def run fn [[comp:Function xs:List] [Integer] [
+  def r ((xs get 0) (xs get 1) comp)
+  r
+]]
+export "M" { low: low/v run: run/v }
+
+# repro-ns-import/main.boru
+import "./m.boru"
+print (M.low "b" "A")              # -1 (direct call: fine)
+print (M.run M.low/v ["b" "A"])    # expected 1; got: undefined word: StringUtil
+```
+
+**Workaround:** the namespace read moves into a private by-name helper
+(`fold-case`), which resolves in the defining module.
+
+**3. A `Test.prop` body reading a namespace member by `/v`.** The
+property bodies of `sort_prop_spec` passed `Sort.by-number/v`; the
+compiler refuses them with `code-body word test-prop (Stage 2)` (the
+`Test.*` quotation-body row of `design/FULL-COMPILATION.0.md`'s S2
+"code-body refusals" census). A module-level binding read by `/v`
+compiles:
+
+```boru
+# repro-test-prop-ns-v/m.boru
+def inc fn [[x:Integer] [Integer] [ x add 1 ]]
+def app fn [[f:Function x:Integer] [Integer] [ x f ]]
+export "M" { inc: inc/v app: app/v }
+
+# repro-test-prop-ns-v/main.boru
+import "boru:test"
+import "./m.boru"
+def p (Test.prop "p" [ 3 ] [ var [[x] ((M.app M.inc/v x) eq 4) ] ])
+def r (p Test.run-property)
+print (r.ok)
+# => error: [boru/compile_failed]: ... code-body word test-prop (Stage 2) ...
+```
+
+**Workaround:** `sort_prop_spec` binds `def by-num (Sort.by-number/v)` at
+module level and its properties pass `by-num/v`.
+
+### Upstream defects that do not affect this library
+
+- The `boru:test` type-ID collision (`expected X, got X` when a library
+  fn returns its own class and `boru:test` is imported first) does not
+  arise: `Sort` returns plain Lists and defines no class, so the suites'
+  import order (`boru:test` first) is safe.
+
+### Historical findings below, re-checked on 64c5ab2
+
+- §1.1–§1.2 (`/r` one-shot, the Array box): obsolete — `/r` is `/v`, and
+  the comparator is threaded directly as a parameter (with the workaround
+  above).
+- §1.3 (recursion reached through a fn param): **fixed** — a recursive
+  helper called from a comparator applied as a value resolves.
+- §1.4 (free words resolve in the running module): **fixed** upstream
+  (boru `7e98aeb`), except the imported-namespace corner (workaround 2).
+- §1.6's cheat-sheet rows "`Sort.by-number` bare ✅" and "`Sort.by-number/r`
+  🟠 don't" are **inverted**: pass `Sort.by-number/v`.
+- §2.1 (`lst get i` in `each` → `None`) and §2.2 (`slice` stringifies):
+  **fixed** — both return the Integers.
+- §3.4 (`and`/`or` do not short-circuit): still true (by design).
+- §4 (reserved words reported at run time): now reported by the
+  pre-flight check (`check error: [boru/reserved_word]`).
+- §6 (checker false positives; `check` advisory): **fixed** — 0 errors,
+  and `check` gates.
+
+---
 
 ## Update (DX-driven boru fixes)
 
