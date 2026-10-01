@@ -1,14 +1,15 @@
 #!/bin/bash
 # SessionStart hook: ensure the `boru` interpreter is available so the agent can
 # run this library's scripts and tests. boru has no tagged release, so we build
-# it from source at the commit this library is pinned to (the same ref CI uses).
+# it from source at boru-lang/boru main HEAD, resolved at run time (the same
+# ref CI and test/divergence/run.sh resolve). Last verified: main @ 64c5ab2.
 #
 # Synchronous and idempotent: skips the build if the binary already exists, and
 # caches into the container so later sessions are instant. Progress goes to
 # stderr; stdout is left clean (SessionStart stdout is injected as context).
 set -uo pipefail
 
-# Web sessions are the target; locally a developer already has aql. No-op
+# Web sessions are the target; locally a developer already has boru. No-op
 # elsewhere. (Remove this guard to build everywhere.)
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
@@ -16,11 +17,8 @@ fi
 
 log() { echo "[session-start] $*" >&2; }
 
-# Keep this in lockstep with the workflow's BORU_REF (the consistency CI job
-# fails if they drift). The canonical workflow lives in
-# .github/workflows/test.yml. Full 40-char commit so the build is
-# reproducible. This is the latest boru `main` at the time the module was
-# written (2026-06-24).
+# The library tracks boru main (no pinned commit). Set BORU_REF to a full
+# 40-char commit to build a specific ref instead.
 BORU_REF="${BORU_REF:-$(git ls-remote https://github.com/boru-lang/boru.git main 2>/dev/null | cut -f1)}"
 BIN_DIR="$HOME/.local/bin"
 BORU="$BIN_DIR/boru"
@@ -40,7 +38,7 @@ else
     exit 0
   fi
   if ! command -v go >/dev/null 2>&1; then
-    log "WARNING: Go toolchain not found; cannot build aql. Install Go, or build boru manually (see docs/how-to.md)."
+    log "WARNING: Go toolchain not found; cannot build boru. Install Go, or build boru manually (see docs/how-to.md)."
     exit 0
   fi
   log "Building boru @ $BORU_REF from source (one-time; cached afterwards)…"
