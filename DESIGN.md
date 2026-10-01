@@ -538,6 +538,14 @@ the sibling `boru:query` and `boru:report` modules. Also here:
 > this group is a combinator, the calling convention for combinator
 > arguments has to be settled — and the docs corrected — before any of
 > them is written.
+>
+> **Resolved (boru main @ 64c5ab2, 2026-10-01).** The library now tracks
+> boru `main`, where `/r` is spelled **`/v`** (ADR-011, renamed
+> 2026-08-19) and a bare name holding a function *calls* everywhere — so
+> **every** comparator argument, to a sort or to a combinator, carries
+> `/v`: `(Sort.reverse Sort.by-number/v)`, `Sort.quick Sort.by-number/v
+> xs`. The docs and suites were migrated to that rule; a new combinator
+> takes its comparator arguments the same way.
 
 > **Latent defect found while surveying:** `Sort.by-generic` is
 > implemented with `cmp`, which is *same-family only*, so
@@ -677,3 +685,13 @@ the ceiling. Either way it must be settled before the combinator family
 as a combinator argument. `Sort.topo` itself is unaffected — it takes its
 comparator in a sort-style argument position, which still accepts the
 bare form.
+
+**Resolved 2026-10-01 — re-pinned to `main`.** On boru main @ 64c5ab2 the
+modifier is **`/v`** (`/r` was renamed by ADR-011 on 2026-08-19) and the
+bare-name-calls rule applies with no slot-typed exception (ADR-011 as
+amended 2026-08-17), so the rule is now uniform: *every* comparator
+passed as an argument — to a sort, to a combinator, to `Sort.topo` when
+it lands — is written with `/v` (`Sort.by-number/v`, `mycmp/v`,
+`cmp/v`). The documentation set and `test/sort_smoke_test.aql` were
+updated accordingly; see `DX-REPORT.md`, "Migration to boru main @
+64c5ab2".
