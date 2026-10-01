@@ -87,7 +87,7 @@ fail=0
 check_errors() {
   local out n
   out="$(timeout "$SUITE_TIMEOUT" "$BORU" check "$1" 2>&1)"
-  n="$(printf '%s\n' "$out" | grep -oE 'check: [0-9]+ error' | grep -oE '[0-9]+' | tail -1)"
+  n="$(printf '%s\n' "$out" | grep -oE 'check( failed)?: [0-9]+ error' | grep -oE '[0-9]+' | tail -1)"
   printf '%s' "${n:-?}"
 }
 

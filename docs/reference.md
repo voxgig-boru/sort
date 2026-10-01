@@ -190,7 +190,7 @@ inefficient — for demonstration, not production.
 |-----------|------|-------|
 | `stooge` | O(n^2.71) | recursive; sorts thirds in a fixed pattern |
 | `slow`   | superpolynomial | "multiply and surrender"; recursive |
-| `bogo`   | unbounded (capped) | shuffle-until-sorted with a deterministic LCG and a hard cap; raises `bogo_giveup` past the cap — use only on tiny inputs |
+| `bogo`   | unbounded (capped) | shuffle-until-sorted with a deterministic LCG and a hard cap of 300,000 shuffles; raises `bogo_giveup` past the cap (on boru main @ 64c5ab2 a 10-element input takes about two minutes to give up) — use only on tiny inputs |
 
 ```boru
 print (Sort.bogo Sort.by-number/v [2 1])   # => [1, 2]
