@@ -4,7 +4,7 @@ This is a hands-on lesson. By the end you will have built a small boru
 script that sorts numbers, sorts strings, sorts by a comparator you write
 yourself, and sorts a list of filenames into *natural* (alphanumeric)
 order. You need no prior knowledge of this library — just a working `boru`
-binary (see [How-to → Install and run](how-to.md#install-and-run-aql))
+binary (see [How-to → Install and run](how-to.md#install-and-run-boru))
 and this repository checked out.
 
 > **AI agents:** for the calling convention and a verified cheat-sheet,
@@ -17,23 +17,23 @@ build it up in pieces and run it after each step.
 
 ## Step 1 — import the module and sort some numbers
 
-Create a file `play.aql` next to `sort.aql` with this content:
+Create a file `play.aql` next to `sort.aql` with this content (the
+import path is resolved against the directory of `play.aql` itself):
 
 ```boru
 import "./sort.aql"
 
-# Print one value per statement, fully grouped — `print (value) end` —
-# and output appears in source order. (Chained `(a) print (b) print`
-# pairs print out of order, because print collects a forward argument.)
+# Print one value per statement — `print (value)` — and output appears in
+# source order. (Chained `(a) print (b) print` pairs print out of order,
+# because print collects a forward argument.)
 
-print (([5 3 8 1 9 2] Sort.quick Sort.by-number end)) end
+print (Sort.quick Sort.by-number/v [5 3 8 1 9 2])
 ```
 
-Read that call left to right: the **data comes first** (`[5 3 8 1 9 2]`),
-then the verb (`Sort.quick`), then the **comparator** that decides the
-order (`Sort.by-number`), and the whole call is terminated with `end`.
-This is boru's universal shape — receiver first, then the word, then any
-extra arguments. There is no `sort(list, cmp)` and no `list.sort(cmp)`
+Read that call left to right: the verb (`Sort.quick`), then the
+**comparator** that decides the order (`Sort.by-number/v`), then the
+**data** — the list being sorted, the call's *receiver*, which always
+comes **last**. There is no `sort(list, cmp)` and no `list.sort(cmp)`
 here. Run it:
 
 ```console
@@ -42,7 +42,9 @@ $ boru play.aql
 ```
 
 `Sort.by-number` is a *comparator*: a little function that, given two
-items, says which comes first. `Sort.quick` is the algorithm — quicksort.
+items, says which comes first. The `/v` suffix hands it to the sort *as a
+value* — in boru a bare name that holds a function **calls** it, so every
+comparator you pass carries `/v`. `Sort.quick` is the algorithm — quicksort.
 The library ships a whole catalogue of algorithms (merge, heap, tim,
 insertion, …); they all take the same shape, so you can swap `Sort.quick`
 for `Sort.merge` and get the same answer. The result is a **new** sorted
@@ -58,7 +60,7 @@ comparator. For strings, reach for `Sort.by-string`, which orders them
 lexicographically (by character code). Append below the first line:
 
 ```boru
-print ((["pear" "Apple" "fig"] Sort.merge Sort.by-string end)) end
+print (Sort.merge Sort.by-string/v ["pear" "Apple" "fig"])
 ```
 
 ```console
@@ -69,10 +71,10 @@ $ boru play.aql
 
 `"Apple"` sorts first because an uppercase `A` (code point 65) comes
 before the lowercase letters (`f`, `p` are 102, 112). That is plain
-lexicographic order — we will fix the case-sensitivity in a moment. Note
-the `end` after every call: boru words look ahead for arguments, and `end`
-marks where the call stops. Forget it and the next token gets swallowed
-as an argument.
+lexicographic order (`Sort.case-insensitive/v` folds case, if you want
+that instead). Note the parens around each call: boru words look ahead
+for arguments, and the closing paren marks where the call stops. Because
+the list comes last, the list itself completes the call.
 
 ---
 
@@ -90,7 +92,7 @@ def by-length fn [
   [b:Any a:Any] [Integer] [ (a size) (b size) cmp ]
 ]
 
-print ((["bbb" "a" "cc"] Sort.merge by-length/r end)) end
+print (Sort.merge by-length/v ["bbb" "a" "cc"])
 ```
 
 ```console
@@ -102,11 +104,11 @@ $ boru play.aql
 Two things to notice. First, the body is written in terms of `a` (the
 earlier item) and `b` (the later one): we compare their sizes with the
 native `cmp`, so a shorter string sorts first. Second — and this is the
-one rule that trips people up — we pass the comparator as `by-length/r`,
-**with a `/r` suffix**. A bare word would *call* `by-length` on the spot;
-`/r` hands it over as a value for the sort to call later. (Comparators
-from the `Sort` namespace, like `Sort.by-number`, are already values, so
-they need no `/r`.)
+one rule that trips people up — we pass the comparator as `by-length/v`,
+**with a `/v` suffix**, exactly like `Sort.by-number/v`. A bare word would
+*call* `by-length` on the spot; `/v` hands it over as a value for the
+sort to call later. The rule is the same for your own words, for the
+namespace comparators and for the built-in `cmp` (`cmp/v`).
 
 ---
 
@@ -115,7 +117,7 @@ they need no `/r`.)
 Here is the headline utility. Imagine sorting a list of filenames:
 
 ```boru
-print ((["file10" "file2" "file1"] Sort.merge Sort.by-string end)) end
+print (Sort.merge Sort.by-string/v ["file10" "file2" "file1"])
 ```
 
 ```console
@@ -130,7 +132,7 @@ in `Sort.natural`, which compares embedded runs of digits by their
 **numeric value**:
 
 ```boru
-print ((["file10" "file2" "file1"] Sort.merge Sort.natural end)) end
+print (Sort.merge Sort.natural/v ["file10" "file2" "file1"])
 ```
 
 ```console
@@ -152,9 +154,9 @@ alone. See it directly:
 
 ```boru
 def original [3 1 2]
-def sorted (original Sort.quick Sort.by-number end)
-print (original) end
-print (sorted) end
+def sorted (Sort.quick Sort.by-number/v original)
+print (original)
+print (sorted)
 ```
 
 ```console
@@ -174,11 +176,13 @@ this way is covered in
 
 ## What you've learned
 
-- A sort is written **data first**: `list Sort.<algo> comparator end`.
+- A sort is written **verb first, list last**:
+  `Sort.<algo> comparator list`. (The piping form
+  `list Sort.<algo> comparator end` binds the same.)
 - The **comparator** decides the order: `Sort.by-number`,
   `Sort.by-string`, `Sort.natural`, and friends — or one you write.
-- Pass a `Sort.*` comparator bare; pass your own comparator word (or the
-  built-in `cmp`) with a **`/r`** suffix.
+- Every comparator you pass carries a **`/v`** suffix — `Sort.by-number/v`,
+  `mycmp/v`, `cmp/v` — so it is handed over as a value, not called.
 - All the comparison algorithms (`quick`, `merge`, `heap`, …) share one
   shape, so they are interchangeable.
 - Sorts return a **new** list; the input is never mutated.

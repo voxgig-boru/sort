@@ -6,7 +6,7 @@ sort is called; if not, start with the [Tutorial](tutorial.md). For the
 [Explanation](explanation.md); for exact signatures, the
 [Reference](reference.md).
 
-- [Install and run boru](#install-and-run-aql)
+- [Install and run boru](#install-and-run-boru)
 - [Sort by a custom comparator](#sort-by-a-custom-comparator)
 - [Sort in descending order](#sort-in-descending-order)
 - [Sort by a key](#sort-by-a-key)
@@ -16,29 +16,32 @@ sort is called; if not, start with the [Tutorial](tutorial.md). For the
 - [Use a distribution sort](#use-a-distribution-sort)
 - [Handle errors](#handle-errors)
 - [Run the tests](#run-the-tests)
+- [Measure performance](#measure-performance)
 
 ---
 
 ## Install and run boru
 
 The module is written in boru, which has no tagged release yet, so build
-the interpreter from source (the documented `go install …/aql@latest`
-fails on the repo's replace directives). A plain `git clone` may be
-blocked, so fetch the pinned commit as a codeload tarball:
+`boru` from source (the documented `go install …@latest` fails on the
+repo's replace directives). The library tracks boru **main**; a plain
+`git clone` may be blocked by an egress proxy, so fetch main HEAD (or any
+commit) as a codeload tarball:
 
 ```bash
-mkdir -p /tmp/aql-source
-curl -fsSL https://codeload.github.com/boru-lang/boru/tar.gz/618562025d9e0154107306927911a8b1b046333c \
-  | tar -xz -C /tmp/aql-source --strip-components=1
-cd /tmp/aql-source/cmd/go
-GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/boru" ./boru
+ref="$(git ls-remote https://github.com/boru-lang/boru.git main | cut -f1)"
+mkdir -p /tmp/boru-source
+curl -fsSL "https://codeload.github.com/boru-lang/boru/tar.gz/$ref" \
+  | tar -xz -C /tmp/boru-source --strip-components=1
+cd /tmp/boru-source/cmd/go
+GOWORK=off GOFLAGS=-mod=mod go build -o "$HOME/.local/bin/boru" ./boru
 ```
 
 Make sure `$HOME/.local/bin` is on your `PATH`, then check it:
 
 ```bash
 boru -version
-# => boru 618562025d9e0154107306927911a8b1b046333c
+# => boru 0.1.0-dev (git 64c5ab2f3aed)   (or the ref you built)
 ```
 
 Run any script in this repo by passing its path:
@@ -47,8 +50,15 @@ Run any script in this repo by passing its path:
 boru test/sort_smoke_test.aql
 ```
 
-This module is verified against boru commit `6185620`; the CI workflow
-pins the same commit.
+`boru X` runs a static pre-flight check, then compiles the program to
+bytecode and runs it on the VM — boru's **only** execution path since
+2026-09-19. There is no interpreter fallback, and the old `--compile` /
+`--force-compile` / `--no-compile` flags are retired (passing one is a
+usage error). `boru check X` runs the static check on its own.
+
+This module was last verified against boru main @ `64c5ab2` (2026-10-01).
+The CI workflow, the SessionStart hook and `test/divergence/run.sh` all
+resolve main HEAD at run time.
 
 ---
 
@@ -56,8 +66,9 @@ pins the same commit.
 
 A comparator is a two-argument function value returning a negative / zero
 / positive Integer when the first item sorts before / equal to / after the
-second. Define one with `fn` and pass it with a **`/r`** suffix so it is
-handed over as a value rather than invoked on the spot:
+second. Define one with `fn` and pass it with a **`/v`** suffix so it is
+handed over as a value rather than invoked on the spot (a bare name that
+holds a function *calls* it):
 
 ```boru
 import "./sort.aql"
@@ -66,7 +77,7 @@ def by-length fn [
   [b:Any a:Any] [Integer] [ (a size) (b size) cmp ]
 ]
 
-print ((["bbb" "a" "cc"] Sort.merge by-length/r end)) end
+print (Sort.merge by-length/v ["bbb" "a" "cc"])
 # => ["a", "cc", "bbb"]
 ```
 
@@ -78,12 +89,12 @@ three-way compare with no overflow risk. To order records by a field:
 def by-second fn [
   [b:Any a:Any] [Integer] [ (a get 1) (b get 1) cmp ]
 ]
-print (([[1 30] [2 10] [3 20]] Sort.merge by-second/r end)) end
-# => [[2, 10], [3, 20], [1, 30]]
+print (Sort.merge by-second/v [[1 30] [2 10] [3 20]])
+# => [[2 10], [3 20], [1 30]]
 ```
 
-(Why your comparator must live in the running module — and why `/r`:
-[Explanation → Function values and `/r`](explanation.md#function-values-and-r).)
+(Why `/v`, and where your comparator's helpers resolve:
+[Explanation → Function values and `/v`](explanation.md#function-values-and-v).)
 
 ---
 
@@ -94,15 +105,17 @@ Don't write a second, reversed comparator — wrap an existing one with the
 that reverses its verdict:
 
 ```boru
-print (([5 3 8 1 9 2] Sort.quick (Sort.by-number Sort.reverse) end)) end
+print (Sort.quick (Sort.reverse Sort.by-number/v) [5 3 8 1 9 2])
 # => [9, 8, 5, 3, 2, 1]
 ```
 
-`reverse` composes with any comparator, including ones you build:
+The comparator going *into* the combinator carries `/v` like any other
+comparator argument; the parens then place the new comparator for the
+sort. `reverse` composes with any comparator, including ones you build:
 
 ```boru
 def by-length fn [[b:Any a:Any] [Integer] [ (a size) (b size) cmp ]]
-print ((["bbb" "a" "cc"] Sort.merge (by-length/r Sort.reverse) end)) end
+print (Sort.merge (Sort.reverse by-length/v) ["bbb" "a" "cc"])
 # => ["bbb", "cc", "a"]
 ```
 
@@ -117,13 +130,17 @@ that orders items by their keys (compared with the native `cmp`):
 
 ```boru
 def length-of fn [[s:Any] [Integer] [ s size ]]
-print ((["bbb" "a" "cc"] Sort.merge (length-of/r Sort.by-key) end)) end
+print (Sort.merge (Sort.by-key length-of/v) ["bbb" "a" "cc"])
 # => ["a", "cc", "bbb"]
 ```
 
-The key function is your own word, so pass it with `/r`. `by-key`
+The key function is passed as a value, so it carries `/v`. `by-key`
 composes with `reverse` for a descending key order:
-`(length-of/r Sort.by-key) Sort.reverse`.
+
+```boru
+print (Sort.merge (Sort.reverse (Sort.by-key length-of/v)) ["bbb" "a" "cc"])
+# => ["bbb", "cc", "a"]
+```
 
 ---
 
@@ -135,7 +152,7 @@ precedes `2`). `Sort.natural` compares embedded runs of digits by their
 filenames, versions, and labels:
 
 ```boru
-print ((["file10" "file2" "file1"] Sort.merge Sort.natural end)) end
+print (Sort.merge Sort.natural/v ["file10" "file2" "file1"])
 # => ["file1", "file2", "file10"]
 ```
 
@@ -150,7 +167,7 @@ It handles digit runs anywhere in the string, so `"x9"` sorts before
 every lowercase one. For a case-folded order, use `Sort.case-insensitive`:
 
 ```boru
-print ((["HELLO" "abc" "Zebra"] Sort.merge Sort.case-insensitive end)) end
+print (Sort.merge Sort.case-insensitive/v ["HELLO" "abc" "Zebra"])
 # => ["abc", "HELLO", "Zebra"]
 ```
 
@@ -181,8 +198,8 @@ inefficient and exist for demonstration only. The full complexity and
 stability table is in the [Reference](reference.md#comparison-sorts).
 
 ```boru
-print (([5 3 8 1 9 2] Sort.sort Sort.by-number end)) end   # => [1, 2, 3, 5, 8, 9]
-print (([5 3 8 1 9 2] Sort.tim  Sort.by-number end)) end   # => [1, 2, 3, 5, 8, 9]
+print (Sort.sort Sort.by-number/v [5 3 8 1 9 2])   # => [1, 2, 3, 5, 8, 9]
+print (Sort.tim  Sort.by-number/v [5 3 8 1 9 2])   # => [1, 2, 3, 5, 8, 9]
 ```
 
 ---
@@ -194,14 +211,15 @@ entirely and order by counting or bucketing. They take **no comparator**
 and always sort ascending:
 
 ```boru
-print (([170 45 75 90 2 802 24 66] Sort.radix-lsd end)) end
+print (Sort.radix-lsd [170 45 75 90 2 802 24 66])
 # => [2, 24, 45, 66, 75, 90, 170, 802]
 ```
 
-`Sort.counting` and `Sort.pigeonhole` also accept **negative** Integers:
+`Sort.counting`, `Sort.pigeonhole` and `Sort.bucket` also accept
+**negative** Integers:
 
 ```boru
-print (([5 -2 8 -1 0] Sort.counting end)) end
+print (Sort.counting [5 -2 8 -1 0])
 # => [-2, -1, 0, 5, 8]
 ```
 
@@ -216,36 +234,46 @@ the right data:
 
 ## Handle errors
 
-Failures raise coded errors. Wrap the call in `do … error …`; inside the
-handler the Error value is on the stack, with `code` and `message`
-fields. Read the code to branch:
+Failures raise coded errors. Wrap the call in `do … error …`. The
+simplest read is to bind what `do` returns — the Error value — and use
+its `code` / `message` fields:
 
 ```boru
-def result (do [["a" "b"] Sort.counting end] error [ get code ])
-print (result) end
+def e (do [Sort.counting ["a" "b"]])
+print (e.code)
+# => bad_input
+```
+
+Inside an `error [ … ]` handler the Error value is on the stack; read a
+field with `dot code` or with a **quoted** key, `get "code"` (`get`
+evaluates its key, so a bare `get code` is an `undefined word: code`):
+
+```boru
+def result (do [Sort.counting ["a" "b"]] error [ dot code ])
+print (result)
 # => bad_input
 ```
 
 The message says exactly what was wrong:
 
 ```boru
-def msg (do [[3 -1 2] Sort.radix-lsd end] error [ get message ])
-print (msg) end
+def msg (do [Sort.radix-lsd [3 -1 2]] error [ get "message" ])
+print (msg)
 # => Sort.radix-lsd: needs non-negative Integers (got -1)
 ```
 
 The two error codes are `bad_input` (a distribution sort got a
 non-Integer, a negative where it needs non-negative, or a value range
 over 1e8) and `bogo_giveup` (`Sort.bogo` exceeded its shuffle cap; use it
-only on tiny inputs). To dispatch on the code, use `case` —
-`get code case [bad_input/q "clean the input" "unexpected"]`. In a test,
-assert the failure instead:
+only on tiny inputs). To dispatch on the code, use `case` on `e.code`. In
+a test, assert the failure instead (`Assert.equal expected actual` in
+forward form):
 
 ```boru
 import "boru:test"
-[["a" "b"] Sort.counting end] Assert.throws end
-def e (do [["a" "b"] Sort.counting end])
-bad_input/q (e get code) Assert.equal end
+Assert.throws [Sort.counting ["a" "b"]]
+def e2 (do [Sort.counting ["a" "b"]])
+Assert.equal bad_input/q e2.code
 ```
 
 (Why the module raises coded errors:
@@ -283,40 +311,41 @@ explicitly. The properties cross-check every algorithm against the stable
 `Sort.merge` reference and assert the no-mutation and is-sorted invariants.
 
 Each assertion-bearing test file ends by asserting `Test.fail-count` is
-`0` and printing `all green`, so a failure makes `boru` exit non-zero —
-which is exactly what the CI workflow checks on every push and pull
-request.
+`0` (`Assert.equal 0 (Test.fail-count)`) and printing `all green`, so a
+failure makes `boru` exit non-zero — which is exactly what the CI workflow
+checks on every push and pull request.
 
-One more check sits outside this set. `test/divergence/` runs every suite
-through all three of boru's execution surfaces — the interpreter, `boru
-check` (static type-check), and the byte compiler (`boru --compile`) — and
-asserts none errors or disagrees. Run it with:
+One more check sits on top of this set. `test/divergence/run.sh` is the
+gate: every suite must exit 0 under `boru X` (and print `all green` where
+it asserts), and `boru check` must report 0 errors on every suite and on
+`sort.aql`. Run it with:
 
 ```bash
-test/divergence/run.sh
+test/divergence/run.sh                        # builds its own boru at main HEAD
+BORU=/path/to/boru test/divergence/run.sh     # reuse an existing build
 ```
 
-It builds a newer boru (the `--compile` CLI postdates this module's pin)
-and prints a per-suite interpreter/check/bytecode matrix. See
+It used to compare boru's interpreter against its byte compiler; with a
+single execution path there is nothing left to compare, so it gates on
+run + check instead. See
 [`test/divergence/README.md`](../test/divergence/README.md) for details.
 
 ## Measure performance
 
 `bench/` holds a performance baseline: `bench/sort_bench.aql` times each
 representative algorithm sorting a fixed, deterministic array (execution-
-only, via `boru:time-util`), and `bench/run.sh` drives each `(algorithm,
-surface)` as its own process — under the interpreter (`AQL_NO_COMPILE=1`)
-and the bytecode VM (the default) — reporting the best-of-N milliseconds
-per algorithm and the interpreter/compiled speedup:
+only, via `boru:time-util`), and `bench/run.sh` runs each algorithm as its
+own `boru` process, reporting the best-of-N milliseconds per algorithm:
 
 ```bash
-boru=/path/to/aql bench/run.sh          # default 3 reps, best-of
+BORU=/path/to/boru bench/run.sh          # default 3 reps, best-of
 ```
 
-The sizes are deliberately small: boru threads a first-class comparator
-through every element move, so the per-comparison function dispatch — not
-the algorithm — dominates the wall-clock. The numbers are for ranking
-algorithms and tracking the interpreter/bytecode gap across boru versions,
-not for comparing against native sorts. `BENCH_TIMEOUT=<secs>` bounds any
-single run so a slow configuration is skipped rather than left to hang.
-A recorded snapshot lives in [`bench/BASELINE.md`](../bench/BASELINE.md).
+There is one column (compiled — boru's only execution path). The sizes
+are deliberately small: boru threads a first-class comparator through
+every element move, so the per-comparison function dispatch — not the
+algorithm — dominates the wall-clock. The numbers are for ranking
+algorithms and tracking them across boru versions, not for comparing
+against native sorts. `BENCH_TIMEOUT=<secs>` bounds any single run so a
+slow configuration is skipped rather than left to hang. A recorded
+snapshot lives in [`bench/BASELINE.md`](../bench/BASELINE.md).

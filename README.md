@@ -8,15 +8,21 @@ Sorts return a new sorted list and never mutate their input.
 ```boru
 import "./sort.aql"
 
-print (([5 3 8 1] Sort.quick Sort.by-number end)) end                # => [1, 3, 5, 8]
-print ((["file10" "file2" "file1"] Sort.merge Sort.natural end)) end # => ['file1', 'file2', 'file10']
-print (([170 45 75 2 802 24] Sort.radix-lsd end)) end                # => [2, 24, 45, 75, 170, 802]
+print (Sort.quick Sort.by-number/v [5 3 8 1])                 # => [1, 3, 5, 8]
+print (Sort.merge Sort.natural/v ["file10" "file2" "file1"])  # => ["file1", "file2", "file10"]
+print (Sort.radix-lsd [170 45 75 2 802 24])                   # => [2, 24, 45, 75, 170, 802]
 ```
 
 > **Calling convention — forward args, receiver (list) last:**
 > `Sort.<algo> comparator list`. Piping `list Sort.<algo> comparator` also
-> works; only `Sort.<algo> list comparator` misbinds. Pass your own
-> comparator with `/r`; namespace comparators (`Sort.by-number`) go bare.
+> works; only `Sort.<algo> list comparator` misbinds (`boru check` rejects
+> it). **Every comparator argument carries `/v`** — `Sort.by-number/v`,
+> your own `mycmp/v`, the built-in `cmp/v` — because a bare name that holds
+> a function calls it.
+
+> **Verified against boru main @ `64c5ab2`** (2026-10-01). The library
+> tracks boru `main` (no pinned commit); see `DX-REPORT.md`, "Migration to
+> boru main @ 64c5ab2", for what changed.
 
 > **Forking this to build a new boru library?** This repo is a GitHub
 > template — read **[TEMPLATE.md](TEMPLATE.md)** for the instantiation
@@ -46,7 +52,7 @@ built-in `cmp`:
 
 ```boru
 def by-len fn [[b:Any a:Any] [Integer] [ (a size) (b size) cmp ]]
-print ((["bbb" "a" "cc"] Sort.merge by-len/r end)) end   # => ['a', 'cc', 'bbb']
+print (Sort.merge by-len/v ["bbb" "a" "cc"])   # => ["a", "cc", "bbb"]
 ```
 
 ## Documentation
@@ -68,15 +74,16 @@ algorithms and just want the API? Jump to the [Reference](docs/reference.md).
 
 | Call | Purpose |
 |------|---------|
-| `list Sort.<algo> comparator` | sort with a comparison algorithm → new sorted List |
-| `list Sort.<algo>`            | sort Integers with a distribution sort (no comparator) |
-| `a b Sort.by-number`          | a comparator: negative / zero / positive Integer |
-| `comp Sort.reverse`           | a comparator that reverses `comp` (descending) |
-| `keyfn Sort.by-key`           | a comparator that orders by a derived key |
-| `list Sort.is-sorted comparator` | test whether a list is ordered → Boolean |
+| `Sort.<algo> comparator list` | sort with a comparison algorithm → new sorted List |
+| `Sort.<algo> list`            | sort Integers with a distribution sort (no comparator) |
+| `Sort.by-number/v`            | a comparator (pass it with `/v`): negative / zero / positive Integer |
+| `(Sort.reverse comp/v)`       | a comparator that reverses `comp` (descending) |
+| `(Sort.by-key keyfn/v)`       | a comparator that orders by a derived key |
+| `Sort.is-sorted comparator list` | test whether a list is ordered → Boolean |
 
-Every call ends with `end` (or is wrapped in parens). Full details are in
-the [Reference](docs/reference.md).
+Wrap a call in parens to use its result as a value; the piping form
+(`list Sort.<algo> comparator`) wants a trailing `end` at statement level.
+Full details are in the [Reference](docs/reference.md).
 
 ## For AI coding agents
 
@@ -113,7 +120,8 @@ test/sort_unit_spec.aql   example-based unit tests — declarative spec format
 test/sort_prop_test.aql   property-based tests — direct (Test.check-prop)
 test/sort_prop_spec.aql   property-based tests — declarative spec format
 test/sort_smoke_test.aql  end-to-end smoke run over every public word
-test/divergence/          three-surface guard (interpreter · check · byte compiler)
+test/divergence/          the gate: every suite runs green (compiled) + boru check clean
+bench/                    performance baseline (bench/run.sh, BASELINE.md)
 docs/                     Diátaxis documentation (above)
 ```
 
@@ -124,9 +132,10 @@ algorithm must return the same ordering as the stable `Sort.merge`.
 
 ## Running it
 
-Build the `boru` interpreter, then run any script or test — see
-[How-to → Install and run](docs/how-to.md#install-and-run-aql) and
-[Run the tests](docs/how-to.md#run-the-tests):
+Build `boru`, then run any script or test — see
+[How-to → Install and run](docs/how-to.md#install-and-run-boru) and
+[Run the tests](docs/how-to.md#run-the-tests). `boru X` checks the program,
+compiles it to bytecode and runs it on the VM — boru's only execution path:
 
 ```bash
 boru test/sort_unit_test.aql   # unit tests — direct
@@ -136,10 +145,15 @@ boru test/sort_prop_spec.aql   # property tests — declarative spec format
 boru test/sort_smoke_test.aql  # end-to-end smoke run
 ```
 
+```bash
+test/divergence/run.sh         # the gate: every suite + boru check on suites and module
+```
+
 A GitHub Actions workflow
-([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds boru from a
-pinned commit and runs every suite — plus a `consistency` job (agent-skill
-drift, JSON manifests, and a pinned-ref guard) — on each push and pull request.
+([`.github/workflows/test.yml`](.github/workflows/test.yml)) builds boru from
+boru-lang/boru `main` HEAD and runs every suite, the gate above, and a
+`consistency` job (agent-skill drift and JSON manifests) on each push and
+pull request.
 
 ## License
 

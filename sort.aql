@@ -186,7 +186,8 @@ def case-insensitive fn [
 # --- combinators ----------------------------------------------------
 #
 # Each returns a NEW comparator (a closure over its arguments), so they
-# compose, e.g. `(keyfn Sort.by-key Sort.by-number) Sort.reverse`.
+# compose, e.g. `(Sort.reverse (Sort.by-key keyfn/v))` — the comparator or
+# key function going in carries `/v`, like any function passed as data.
 
 def rev-cmp fn [
   [comp:Function] [Function] [
@@ -197,7 +198,7 @@ def rev-cmp fn [
 # Order by a derived key. `keyfn` maps each item to a key; the keys are
 # ordered by the native `cmp` (numbers numerically, strings
 # lexicographically). One captured function, so it composes through a
-# sort (e.g. `(len-of Sort.by-key) Sort.reverse`).
+# sort (e.g. `Sort.merge (Sort.reverse (Sort.by-key len-of/v)) xs`).
 def by-key-cmp fn [
   [keyfn:Function] [Function] [
     [b:Any a:Any] => [ ((a keyfn) (b keyfn) cmp) ]
