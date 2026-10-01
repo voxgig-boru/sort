@@ -6,10 +6,10 @@
 # covers the same ground through the declarative spec surface.
 #
 # Run:
-#   aql test/sort_unit_test.aql
+#   boru test/sort_unit_test.aql
 
-import "boru:test" end
-import "./sort.aql" end
+import "boru:test"
+import "../sort.aql"
 
 
 # --- every comparison sort on a shared example ----------------------
@@ -20,102 +20,105 @@ import "./sort.aql" end
 def sample [5 3 8 3 1 9 2 7]
 def sorted [1 2 3 3 5 7 8 9]
 
-[ sorted (sample Sort.bubble    Sort.by-number end) Assert.equal end ] "bubble"    Test.test end
-[ sorted (sample Sort.insertion Sort.by-number end) Assert.equal end ] "insertion" Test.test end
-[ sorted (sample Sort.selection Sort.by-number end) Assert.equal end ] "selection" Test.test end
-[ sorted (sample Sort.gnome     Sort.by-number end) Assert.equal end ] "gnome"     Test.test end
-[ sorted (sample Sort.cocktail  Sort.by-number end) Assert.equal end ] "cocktail"  Test.test end
-[ sorted (sample Sort.comb      Sort.by-number end) Assert.equal end ] "comb"      Test.test end
-[ sorted (sample Sort.shell     Sort.by-number end) Assert.equal end ] "shell"     Test.test end
-[ sorted (sample Sort.odd-even  Sort.by-number end) Assert.equal end ] "odd-even"  Test.test end
-[ sorted (sample Sort.cycle     Sort.by-number end) Assert.equal end ] "cycle"     Test.test end
-[ sorted (sample Sort.pancake   Sort.by-number end) Assert.equal end ] "pancake"   Test.test end
-[ sorted (sample Sort.bitonic   Sort.by-number end) Assert.equal end ] "bitonic"   Test.test end
-[ sorted (sample Sort.quick     Sort.by-number end) Assert.equal end ] "quick"     Test.test end
-[ sorted (sample Sort.merge     Sort.by-number end) Assert.equal end ] "merge"     Test.test end
-[ sorted (sample Sort.heap      Sort.by-number end) Assert.equal end ] "heap"      Test.test end
-[ sorted (sample Sort.intro     Sort.by-number end) Assert.equal end ] "intro"     Test.test end
-[ sorted (sample Sort.tim       Sort.by-number end) Assert.equal end ] "tim"       Test.test end
-[ sorted (sample Sort.stooge    Sort.by-number end) Assert.equal end ] "stooge"    Test.test end
-[ sorted (sample Sort.slow      Sort.by-number end) Assert.equal end ] "slow"      Test.test end
-[ sorted (sample Sort.sort      Sort.by-number end) Assert.equal end ] "sort"      Test.test end
+Test.test "bubble"    [ Assert.equal sorted (sample Sort.bubble    Sort.by-number/v end) ]
+Test.test "insertion" [ Assert.equal sorted (sample Sort.insertion Sort.by-number/v end) ]
+Test.test "selection" [ Assert.equal sorted (sample Sort.selection Sort.by-number/v end) ]
+Test.test "gnome"     [ Assert.equal sorted (sample Sort.gnome     Sort.by-number/v end) ]
+Test.test "cocktail"  [ Assert.equal sorted (sample Sort.cocktail  Sort.by-number/v end) ]
+Test.test "comb"      [ Assert.equal sorted (sample Sort.comb      Sort.by-number/v end) ]
+Test.test "shell"     [ Assert.equal sorted (sample Sort.shell     Sort.by-number/v end) ]
+Test.test "odd-even"  [ Assert.equal sorted (sample Sort.odd-even  Sort.by-number/v end) ]
+Test.test "cycle"     [ Assert.equal sorted (sample Sort.cycle     Sort.by-number/v end) ]
+Test.test "pancake"   [ Assert.equal sorted (sample Sort.pancake   Sort.by-number/v end) ]
+Test.test "bitonic"   [ Assert.equal sorted (sample Sort.bitonic   Sort.by-number/v end) ]
+Test.test "quick"     [ Assert.equal sorted (sample Sort.quick     Sort.by-number/v end) ]
+Test.test "merge"     [ Assert.equal sorted (sample Sort.merge     Sort.by-number/v end) ]
+Test.test "heap"      [ Assert.equal sorted (sample Sort.heap      Sort.by-number/v end) ]
+Test.test "intro"     [ Assert.equal sorted (sample Sort.intro     Sort.by-number/v end) ]
+Test.test "tim"       [ Assert.equal sorted (sample Sort.tim       Sort.by-number/v end) ]
+Test.test "stooge"    [ Assert.equal sorted (sample Sort.stooge    Sort.by-number/v end) ]
+Test.test "slow"      [ Assert.equal sorted (sample Sort.slow      Sort.by-number/v end) ]
+Test.test "sort"      [ Assert.equal sorted (sample Sort.sort      Sort.by-number/v end) ]
 
 
 # --- distribution sorts (no comparator) -----------------------------
 
-[ sorted (sample Sort.counting   end) Assert.equal end ] "counting"   Test.test end
-[ sorted (sample Sort.pigeonhole end) Assert.equal end ] "pigeonhole" Test.test end
-[ sorted (sample Sort.radix-lsd  end) Assert.equal end ] "radix-lsd"  Test.test end
-[ sorted (sample Sort.radix-msd  end) Assert.equal end ] "radix-msd"  Test.test end
-[ sorted (sample Sort.bucket     end) Assert.equal end ] "bucket"     Test.test end
-[ sorted (sample Sort.bead       end) Assert.equal end ] "bead"       Test.test end
+Test.test "counting"   [ Assert.equal sorted (sample Sort.counting   end) ]
+Test.test "pigeonhole" [ Assert.equal sorted (sample Sort.pigeonhole end) ]
+Test.test "radix-lsd"  [ Assert.equal sorted (sample Sort.radix-lsd  end) ]
+Test.test "radix-msd"  [ Assert.equal sorted (sample Sort.radix-msd  end) ]
+Test.test "bucket"     [ Assert.equal sorted (sample Sort.bucket     end) ]
+Test.test "bead"       [ Assert.equal sorted (sample Sort.bead       end) ]
 
 # multi-digit values stress the radix / bucket paths
-[
-  [1 5 10 11 55 100 1000]
-  ([1000 10 100 1 11 5 55] Sort.radix-lsd end) Assert.equal end
-] "radix-lsd-multidigit" Test.test end
-[
-  [1 5 10 11 55 100 1000]
-  ([1000 10 100 1 11 5 55] Sort.radix-msd end) Assert.equal end
-] "radix-msd-multidigit" Test.test end
+Test.test "radix-lsd-multidigit" [
+  Assert.equal [1 5 10 11 55 100 1000] ([1000 10 100 1 11 5 55] Sort.radix-lsd end)
+]
+Test.test "radix-msd-multidigit" [
+  Assert.equal [1 5 10 11 55 100 1000] ([1000 10 100 1 11 5 55] Sort.radix-msd end)
+]
 
 
 # --- bogosort on a tiny input ---------------------------------------
 
-[ [1 2 3] ([3 1 2] Sort.bogo Sort.by-number end) Assert.equal end ] "bogo-tiny" Test.test end
+Test.test "bogo-tiny" [ Assert.equal [1 2 3] ([3 1 2] Sort.bogo Sort.by-number/v end) ]
 
 
 # --- edge cases -----------------------------------------------------
 
-[ [] ([] Sort.quick Sort.by-number end) Assert.equal end ] "empty"        Test.test end
-[ [42] ([42] Sort.merge Sort.by-number end) Assert.equal end ] "singleton" Test.test end
-[ [7 7 7] ([7 7 7] Sort.heap Sort.by-number end) Assert.equal end ] "all-equal" Test.test end
-[ [1 2 3 4] ([1 2 3 4] Sort.quick Sort.by-number end) Assert.equal end ] "already-sorted" Test.test end
-[ [1 2 3 4] ([4 3 2 1] Sort.quick Sort.by-number end) Assert.equal end ] "reversed" Test.test end
-[ [] ([] Sort.counting end) Assert.equal end ] "empty-counting" Test.test end
+Test.test "empty"        [ Assert.equal [] ([] Sort.quick Sort.by-number/v end) ]
+Test.test "singleton" [ Assert.equal [42] ([42] Sort.merge Sort.by-number/v end) ]
+Test.test "all-equal" [ Assert.equal [7 7 7] ([7 7 7] Sort.heap Sort.by-number/v end) ]
+Test.test "already-sorted" [ Assert.equal [1 2 3 4] ([1 2 3 4] Sort.quick Sort.by-number/v end) ]
+Test.test "reversed" [ Assert.equal [1 2 3 4] ([4 3 2 1] Sort.quick Sort.by-number/v end) ]
+Test.test "empty-counting" [ Assert.equal [] ([] Sort.counting end) ]
 
 
 # --- comparators ----------------------------------------------------
 
-[ ["Apple" "banana" "fig" "pear"] (["pear" "Apple" "fig" "banana"] Sort.merge Sort.by-string end) Assert.equal end ] "by-string" Test.test end
-[ [false false true true] ([true false true false] Sort.merge Sort.by-boolean end) Assert.equal end ] "by-boolean" Test.test end
-[ [0.1 1.2 2.8 3.5] ([3.5 1.2 2.8 0.1] Sort.quick Sort.by-number end) Assert.equal end ] "floats" Test.test end
+Test.test "by-string" [ Assert.equal ["Apple" "banana" "fig" "pear"] (["pear" "Apple" "fig" "banana"] Sort.merge Sort.by-string/v end) ]
+Test.test "by-boolean" [ Assert.equal [false false true true] ([true false true false] Sort.merge Sort.by-boolean/v end) ]
+Test.test "floats" [ Assert.equal [0.1 1.2 2.8 3.5] ([3.5 1.2 2.8 0.1] Sort.quick Sort.by-number/v end) ]
 
 # natural / alphanumeric ordering — the headline utility
-[ ["file1" "file2" "file10" "file20"] (["file10" "file2" "file20" "file1"] Sort.merge Sort.natural end) Assert.equal end ] "natural" Test.test end
-[ ["x2" "x10"] (["x10" "x2"] Sort.merge Sort.natural end) Assert.equal end ] "natural-x" Test.test end
+Test.test "natural" [ Assert.equal ["file1" "file2" "file10" "file20"] (["file10" "file2" "file20" "file1"] Sort.merge Sort.natural/v end) ]
+Test.test "natural-x" [ Assert.equal ["x2" "x10"] (["x10" "x2"] Sort.merge Sort.natural/v end) ]
 
 # case-insensitive
-[ ["apple" "Banana" "Cherry"] (["Cherry" "apple" "Banana"] Sort.merge Sort.case-insensitive end) Assert.equal end ] "case-insensitive" Test.test end
+Test.test "case-insensitive" [ Assert.equal ["apple" "Banana" "Cherry"] (["Cherry" "apple" "Banana"] Sort.merge Sort.case-insensitive/v end) ]
 
 # combinators: reverse and by-key
-[ [9 5 3 1] ([3 9 1 5] Sort.quick (Sort.by-number Sort.reverse) end) Assert.equal end ] "reverse" Test.test end
+Test.test "reverse" [ Assert.equal [9 5 3 1] ([3 9 1 5] Sort.quick (Sort.by-number/v Sort.reverse) end) ]
 
 
 # --- predicate ------------------------------------------------------
 
-[ true  ([1 2 3]   Sort.is-sorted Sort.by-number end) Assert.equal end ] "is-sorted-true"  Test.test end
-[ false ([3 1 2]   Sort.is-sorted Sort.by-number end) Assert.equal end ] "is-sorted-false" Test.test end
-[ true  ([]        Sort.is-sorted Sort.by-number end) Assert.equal end ] "is-sorted-empty" Test.test end
+Test.test "is-sorted-true"  [ Assert.equal true ([1 2 3]   Sort.is-sorted Sort.by-number/v end) ]
+Test.test "is-sorted-false" [ Assert.equal false ([3 1 2]   Sort.is-sorted Sort.by-number/v end) ]
+Test.test "is-sorted-empty" [ Assert.equal true ([]        Sort.is-sorted Sort.by-number/v end) ]
 
 
 # --- error paths ----------------------------------------------------
 
 # A distribution sort rejects non-Integer elements.
-[ [["a" "b"] Sort.counting end] Assert.throws end ] "counting-needs-ints" Test.test end
+Test.test "counting-needs-ints" [ Assert.throws [["a" "b"] Sort.counting end] ]
 def e1 (do [["a" "b"] Sort.counting end])
-[ bad_input/q (e1.code) Assert.equal end ] "counting-bad_input-code" Test.test end
+Test.test "counting-bad_input-code" [ Assert.equal bad_input/q (e1.code) ]
 
 # Radix rejects negatives.
-[ [[3 -1 2] Sort.radix-lsd end] Assert.throws end ] "radix-needs-non-neg" Test.test end
+Test.test "radix-needs-non-neg" [ Assert.throws [[3 -1 2] Sort.radix-lsd end] ]
 def e2 (do [[3 -1 2] Sort.radix-lsd end])
-[ bad_input/q (e2.code) Assert.equal end ] "radix-bad_input-code" Test.test end
+Test.test "radix-bad_input-code" [ Assert.equal bad_input/q (e2.code) ]
 
 
 # --- summary --------------------------------------------------------
 
-"---" print
-"fail count: " print Test.fail-count end print
-0 Test.fail-count end Assert.equal end
-"all green" print
+# One value per `print`, in forward form, and the final assertion with its
+# operands written forward: the old chained spelling (`"---" print "fail
+# count: " print Test.fail-count end print`, then `0 Test.fail-count end
+# Assert.equal end`) evaluates out of source order on boru main, dropped
+# the "---" line, and compared the fail count against a stray stack value.
+print ("---")
+print (`fail count: ${(Test.fail-count)}`)
+Assert.equal 0 (Test.fail-count)
+print ("all green")

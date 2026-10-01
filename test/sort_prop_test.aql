@@ -14,10 +14,29 @@
 # input and equals the merge result, the algorithm is correct.
 #
 # Run:
-#   aql test/sort_prop_test.aql
+#   boru test/sort_prop_test.aql
 
-import "boru:test" end
-import "./sort.aql" end
+import "boru:test"
+import "../sort.aql"
+
+
+# --- reporting helper (one PropertyResult -> a pass/fail line) --------
+#
+# On boru main `Test.check-prop` RETURNS its PropertyResult Map (a failure
+# is also counted in `Test.fail-count`, which the summary asserts). Each
+# check below hands that Map to `report`, so nothing is left on the stack
+# for the end-of-run residual print.
+
+def report fn [
+  [res:Map] [] [
+    def ok (res "ok" get)
+    def nm (res "name" get)
+    def msg (if ok
+      [`ok   ${nm} (${(res "runs" get)} runs)`]
+      [`FAIL ${nm}  failing-input: ${(res "failing-input" get)}`])
+    msg print
+  ]
+]
 
 
 # --- key extractor used by the stability property -------------------
@@ -35,29 +54,29 @@ def val-key fn [
 # sort's output. Equal-to-merge implies both "is a permutation of the
 # input" and "is correctly ordered" — the two halves of correctness.
 
-Test.check-prop "all-comparison-sorts-agree-with-merge"
+report (Test.check-prop "all-comparison-sorts-agree-with-merge"
   [ iota (r.int 0 7) each [ var [[i] r.int 0 12 ] ] ]
   [
     var [[lst]
-      def want (lst Sort.merge Sort.by-number end)
+      def want (lst Sort.merge Sort.by-number/v end)
       def results [
-        (lst Sort.bubble    Sort.by-number end)
-        (lst Sort.insertion Sort.by-number end)
-        (lst Sort.selection Sort.by-number end)
-        (lst Sort.gnome     Sort.by-number end)
-        (lst Sort.cocktail  Sort.by-number end)
-        (lst Sort.comb      Sort.by-number end)
-        (lst Sort.shell     Sort.by-number end)
-        (lst Sort.odd-even  Sort.by-number end)
-        (lst Sort.cycle     Sort.by-number end)
-        (lst Sort.pancake   Sort.by-number end)
-        (lst Sort.bitonic   Sort.by-number end)
-        (lst Sort.quick     Sort.by-number end)
-        (lst Sort.heap      Sort.by-number end)
-        (lst Sort.intro     Sort.by-number end)
-        (lst Sort.tim       Sort.by-number end)
-        (lst Sort.stooge    Sort.by-number end)
-        (lst Sort.slow      Sort.by-number end)
+        (lst Sort.bubble    Sort.by-number/v end)
+        (lst Sort.insertion Sort.by-number/v end)
+        (lst Sort.selection Sort.by-number/v end)
+        (lst Sort.gnome     Sort.by-number/v end)
+        (lst Sort.cocktail  Sort.by-number/v end)
+        (lst Sort.comb      Sort.by-number/v end)
+        (lst Sort.shell     Sort.by-number/v end)
+        (lst Sort.odd-even  Sort.by-number/v end)
+        (lst Sort.cycle     Sort.by-number/v end)
+        (lst Sort.pancake   Sort.by-number/v end)
+        (lst Sort.bitonic   Sort.by-number/v end)
+        (lst Sort.quick     Sort.by-number/v end)
+        (lst Sort.heap      Sort.by-number/v end)
+        (lst Sort.intro     Sort.by-number/v end)
+        (lst Sort.tim       Sort.by-number/v end)
+        (lst Sort.stooge    Sort.by-number/v end)
+        (lst Sort.slow      Sort.by-number/v end)
       ]
       def ok (flex [true])
       def _ (results each [
@@ -66,17 +85,16 @@ Test.check-prop "all-comparison-sorts-agree-with-merge"
       ok get 0
     ]
   ]
-  25 1 0
-end
+  25 1 0)
 
 
 # --- P4b. Distribution sorts agree with merge (non-negative ints) ---
 
-Test.check-prop "distribution-sorts-agree-with-merge"
+report (Test.check-prop "distribution-sorts-agree-with-merge"
   [ iota (r.int 0 8) each [ var [[i] r.int 0 40 ] ] ]
   [
     var [[lst]
-      def want (lst Sort.merge Sort.by-number end)
+      def want (lst Sort.merge Sort.by-number/v end)
       def results [
         (lst Sort.counting   end)
         (lst Sort.pigeonhole end)
@@ -92,32 +110,29 @@ Test.check-prop "distribution-sorts-agree-with-merge"
       ok get 0
     ]
   ]
-  25 1 0
-end
+  25 1 0)
 
 
 # --- P2. Output is ordered ------------------------------------------
 
-Test.check-prop "quick-output-is-ordered"
+report (Test.check-prop "quick-output-is-ordered"
   [ iota (r.int 0 12) each [ var [[i] r.int 0 50 ] ] ]
-  [ var [[lst] (lst Sort.quick Sort.by-number end) Sort.is-sorted Sort.by-number end ] ]
-  30 7 0
-end
+  [ var [[lst] (lst Sort.quick Sort.by-number/v end) Sort.is-sorted Sort.by-number/v end ] ]
+  30 7 0)
 
 
 # --- P3. Idempotent: sorting a sorted list is a no-op ---------------
 
-Test.check-prop "sort-is-idempotent"
+report (Test.check-prop "sort-is-idempotent"
   [ iota (r.int 0 12) each [ var [[i] r.int 0 50 ] ] ]
   [
     var [[lst]
-      def once (lst  Sort.heap Sort.by-number end)
-      def twice (once Sort.heap Sort.by-number end)
+      def once (lst  Sort.heap Sort.by-number/v end)
+      def twice (once Sort.heap Sort.by-number/v end)
       (once deq twice)
     ]
   ]
-  30 3 0
-end
+  30 3 0)
 
 
 # --- P5. Reverse duality --------------------------------------------
@@ -126,17 +141,16 @@ end
 # with the comparator (for distinct elements; with ties the multiset
 # still matches, which `deq` after reverse verifies on these inputs).
 
-Test.check-prop "reverse-comparator-reverses-output"
+report (Test.check-prop "reverse-comparator-reverses-output"
   [ iota (r.int 0 10) each [ var [[i] r.int 0 100 ] ] ]
   [
     var [[lst]
-      def asc  (lst Sort.quick Sort.by-number end)
-      def desc (lst Sort.quick (Sort.by-number Sort.reverse) end)
+      def asc  (lst Sort.quick Sort.by-number/v end)
+      def desc (lst Sort.quick (Sort.by-number/v Sort.reverse) end)
       (desc deq (asc reverse))
     ]
   ]
-  30 5 0
-end
+  30 5 0)
 
 
 # --- P6. Stability: merge & insertion keep equal keys in order ------
@@ -146,7 +160,7 @@ end
 # index-tagged pairs with a key comparator and confirming the tags are
 # non-decreasing within each value group via a direct scan.
 
-Test.check-prop "merge-is-stable-on-duplicate-keys"
+report (Test.check-prop "merge-is-stable-on-duplicate-keys"
   [ iota (r.int 0 10) each [ var [[i] r.int 0 3 ] ] ]
   [
     var [[lst]
@@ -158,36 +172,39 @@ Test.check-prop "merge-is-stable-on-duplicate-keys"
       def enc (flex (iota n each [drop 0]))
       def _ (iota n each [ var [[i] enc set i (((arr get i) mul 1000) add i) end drop 0 ] ])
       def encl (enc slice 0 (enc size))
-      def by-val (encl Sort.merge (val-key/r Sort.by-key) end)
+      def by-val (encl Sort.merge (val-key/v Sort.by-key) end)
       # stable ⇒ by-val equals sorting the encoded numbers outright
-      def direct (encl Sort.merge Sort.by-number end)
+      def direct (encl Sort.merge Sort.by-number/v end)
       (by-val deq direct)
     ]
   ]
-  25 9 0
-end
+  25 9 0)
 
 
 # --- P7. Comparator laws --------------------------------------------
 
-Test.check-prop "natural-orders-numeric-suffixes-by-value"
+report (Test.check-prop "natural-orders-numeric-suffixes-by-value"
   [ r.int 2 99 ]
   [
     var [[k]
       def small `file${k}`
       def big   `file${(k mul 10)}`
       def pair  [big small]
-      def got   (pair Sort.merge Sort.natural end)
+      def got   (pair Sort.merge Sort.natural/v end)
       (got deq [small big])
     ]
   ]
-  20 2 0
-end
+  20 2 0)
 
 
 # --- summary --------------------------------------------------------
 
-"---" print
-"fail count: " print Test.fail-count end print
-0 Test.fail-count end Assert.equal end
-"all green" print
+# One value per `print`, in forward form, and the final assertion with its
+# operands written forward: the old chained spelling (`"---" print "fail
+# count: " print Test.fail-count end print`, then `0 Test.fail-count end
+# Assert.equal end`) evaluates out of source order on boru main, dropped
+# the "---" line, and compared the fail count against a stray stack value.
+print ("---")
+print (`fail count: ${(Test.fail-count)}`)
+Assert.equal 0 (Test.fail-count)
+print ("all green")

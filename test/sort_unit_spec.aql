@@ -20,10 +20,10 @@
 # `test/sort_unit_test.aql` and by property in `test/sort_prop_spec.aql`.
 #
 # Run:
-#   aql test/sort_unit_spec.aql
+#   boru test/sort_unit_spec.aql
 
-import "boru:test" end
-import "./sort.aql" end
+import "boru:test"
+import "../sort.aql"
 
 
 def specs [
@@ -157,7 +157,12 @@ def _ (specs each [
 
 # --- summary -------------------------------------------------------
 
-"---" print
-"fail count: " print Test.fail-count end print
-0 Test.fail-count end Assert.equal end
-"all green" print
+# One value per `print`, in forward form, and the final assertion with its
+# operands written forward: the old chained spelling (`"---" print "fail
+# count: " print Test.fail-count end print`, then `0 Test.fail-count end
+# Assert.equal end`) evaluates out of source order on boru main, dropped
+# the "---" line, and compared the fail count against a stray stack value.
+print ("---")
+print (`fail count: ${(Test.fail-count)}`)
+Assert.equal 0 (Test.fail-count)
+print ("all green")
