@@ -81,19 +81,21 @@ receiver (the graph) LAST**.
 | `Sort.edges-graph edges` | `Map` | `[[before after] …]` pair list → adjacency `Map`. The `tsort(1)` input shape. |
 | `Sort.is-topo comp graph` *(optional)* | `Boolean` | Acyclicity test with no witness. Cheap; ship only if a caller wants the predicate without the raise. |
 
-Piping form works identically (`graph Sort.topo comp end`), and the one
+Piping form works identically (`graph Sort.topo comp/v end`), and the one
 misbinding order is the same one the rest of the library documents:
-`Sort.topo graph comp` reads the graph as the comparator.
+`Sort.topo graph comp/v` reads the graph as the comparator. As with every
+sort, the comparator is passed as a value — `comp/v`, `Sort.by-string/v` —
+because a bare name holding a function calls it (boru main, ADR-011).
 
 Sketch of the intended call sites:
 
 ```boru
 def g {build: ["test" "lint"], test: ["deploy"], lint: ["deploy"], deploy: []}
 
-Sort.topo Sort.by-string g
+Sort.topo Sort.by-string/v g
 # => ["build" "lint" "test" "deploy"]
 
-Sort.topo-layers Sort.by-string g
+Sort.topo-layers Sort.by-string/v g
 # => [["build"] ["lint" "test"] ["deploy"]]
 ```
 
@@ -131,7 +133,7 @@ spec sentence says the pair `a b` means a precedes b.
    that never run.
 
 Users whose data is in dependency form (package manifests, `requires:`
-lists — the common real-world shape) write `Sort.topo comp (Sort.invert
+lists — the common real-world shape) write `Sort.topo comp/v (Sort.invert
 deps)`. One word, self-documenting at the call site, and `Sort.invert` is
 independently useful.
 
@@ -167,7 +169,7 @@ high-ranking one lands *after* it:
 
 ```boru
 def g {zebra: ["apple"], apple: []}
-Sort.topo Sort.by-string g      # => ["zebra" "apple"]  — NOT alphabetical
+Sort.topo Sort.by-string/v g    # => ["zebra" "apple"]  — NOT alphabetical
 ```
 
 Callers who expect "sorted, then repaired" will file this as a bug. It
@@ -249,7 +251,7 @@ be derived from the *same* de-duplicated adjacency the main loop walks.
 
 ## 6. Layers
 
-`Sort.topo-layers comp g` returns a `List` of `List`s: layer 0 is every
+`Sort.topo-layers comp/v g` returns a `List` of `List`s: layer 0 is every
 node with no prerequisites, layer *k+1* is everything unblocked once all
 of layer *k* is done. Same engine, one extra boundary in the loop, same
 Θ(V+E).
@@ -361,6 +363,15 @@ is the single-module rule the library already documents, and it is also
 why `boru check` stays advisory for this repo: its known false positives
 are precisely on first-class function values.
 
+> **Note (2026-10-01, boru main @ 64c5ab2).** `boru check` is no longer
+> advisory here: every suite and `sort.aql` check with 0 errors, and the
+> gate (`test/divergence/run.sh`) fails on any check error. The
+> single-module rule still holds, for a narrower reason — a comparator
+> that reads an *imported* namespace directly does not resolve when
+> applied as a value for a caller without that import (`fold-case` in
+> `sort.aql`; `DX-REPORT.md`, migration section). `Sort.topo` takes its
+> comparator as `comp/v`, like every sort.
+
 Shape of the loop, elided — this is the skeleton the constraints above
 force, not an implementation:
 
@@ -401,7 +412,7 @@ Further properties worth pinning, in rough value order:
 
 | Property | Catches |
 |---|---|
-| Empty graph ⇒ plain sort: `Sort.topo comp g` with no edges `deq` `Sort.merge comp nodes` | the §1 degeneracy claim — the reason the word is in this namespace |
+| Empty graph ⇒ plain sort: `Sort.topo comp/v g` with no edges `deq` `Sort.merge comp/v nodes` | the §1 degeneracy claim — the reason the word is in this namespace |
 | Cycle always detected: DAG + one back-edge ⇒ raises; self-loop ⇒ raises; 2-cycle ⇒ raises | 2-colour detection bugs, missing self-loop handling |
 | Witness validity: reported `cycle` has first == last, every consecutive pair is a real edge | witness-extraction bugs (the strongest single cycle test) |
 | Duplicate-edge invariance: duplicating every edge changes nothing and reports no cycle | the §5 phantom-cycle bug |
@@ -553,7 +564,7 @@ the sibling `boru:query` and `boru:report` modules. Also here:
 
 > **Latent defect found while surveying:** `Sort.by-generic` is
 > implemented with `cmp`, which is *same-family only*, so
-> `[1 "a"] Sort.merge Sort.by-generic` raises `incomparable` despite the
+> `Sort.merge Sort.by-generic/v [1 "a"]` raises `incomparable` despite the
 > name promising polymorphism. `Sort.total` (using `tcmp`) is the
 > three-line fix and should land with this family.
 
