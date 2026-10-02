@@ -240,8 +240,8 @@ print (code)                                                   # => bad_input
 | `Sort.quick([3 1 2], cmp)` | `Sort.quick cmp/v [3 1 2]` | No `f(a,b)` syntax in boru. |
 | `[3 1 2].sort(cmp)` | `Sort.quick cmp/v [3 1 2]` | No method-call syntax. |
 | `Sort.quick nums Sort.by-number/v` (receiver between verb and comparator) | `Sort.quick Sort.by-number/v nums` (receiver LAST) | Receiver-first-all-forward matches no signature: `boru check` reports `uncalled_function: call to 'quick-sort' matched no signature` and the run is blocked. |
-| `Sort.quick Sort.by-number nums` / `(Sort.by-number Sort.reverse)` | `Sort.by-number/v` | A bare name holding a function **calls** it — `uncalled_function: call to 'by-number' matched no signature`. Namespace comparators need `/v` like any other. (A few positions still tolerate the bare member on 64c5ab2; don't rely on it.) |
-| `Sort.quick mycmp nums` / `Sort.quick cmp nums` | `mycmp/v`, `cmp/v` | Same rule for your own words and the built-in. |
+| `Sort.quick Sort.by-number nums` / `(Sort.by-number Sort.reverse)` | `Sort.by-number/v` | A bare name holding a function **calls** it, so `boru check` reports `uncalled_function` — `call to 'quick-sort' matched no signature` for the first, `call to 'by-number' matched no signature` for the second. Namespace comparators need `/v` like any other. (A few positions still tolerate the bare member on 64c5ab2; don't rely on it.) |
+| `Sort.quick mycmp nums` / `Sort.quick cmp nums` | `mycmp/v`, `cmp/v` | Same rule for your own words and the built-in (`uncalled_function: call to 'quick-sort' matched no signature`). |
 | `mycmp/r`, `Sort.by-number/r` | `/v` | `/r` was renamed `/v` (ADR-011); `mycmp/r` is an `undefined word`. |
 | `xs Sort.quick Sort.by-number/v` with more tokens after it | `xs Sort.quick Sort.by-number/v end`, or forward `Sort.quick Sort.by-number/v xs` | In the piping form the call can collect a following literal as its list. |
 | treat a sort as in-place (sort `xs`, then read `xs`) | bind the result: `def s (Sort.quick … xs)` | Sorts return a **new** List; the input is unchanged. |

@@ -315,6 +315,10 @@ measured linear (400 ms at n=32,000).
 
 **8.3 — Loop, don't recurse; and mind the two opposite body-arity rules.**
 There is no `while`. The idiom is `for N [body]` with an early `break`.
+(*Update, boru main @ 64c5ab2:* boru has since grown `while [cond] [body]`
+(boru `99fc2c3`, 2026-08-21), and a `while` inside a `fn` compiles and runs
+on 64c5ab2. A bounded loop is still the safer shape for an algorithm whose
+worst case should be explicit — and is what `sort.aql` uses.)
 Inside a `fn`, a `for` body must net **zero** values, while an `each` body
 must yield **exactly one** (push a sentinel `0`). Getting either wrong is
 a hard error, not a warning. This matches how every existing algorithm in

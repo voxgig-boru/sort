@@ -40,9 +40,9 @@ The **piping** form wants `end` (or parens) so the trailing comparator
 cannot collect a following literal.
 
 ```boru
-Sort.quick Sort.by-number/v [3 1 2]       # => [1, 2, 3]    ✓ forward (canonical)
-[3 1 2] Sort.quick Sort.by-number/v end   # => [1, 2, 3]    ✓ piping
-Sort.counting [5 2 8 1]                    # => [1, 2, 5, 8] (no comparator)
+print (Sort.quick Sort.by-number/v [3 1 2])       # => [1, 2, 3]    ✓ forward (canonical)
+print ([3 1 2] Sort.quick Sort.by-number/v end)   # => [1, 2, 3]    ✓ piping
+print (Sort.counting [5 2 8 1])                   # => [1, 2, 5, 8] (no comparator)
 ```
 
 The **one** order that MISBINDS is receiver-first-all-forward —
@@ -146,7 +146,7 @@ print (e.code)                                                  # => bad_input
 |---------|------|-----|
 | `Sort.quick([3 1 2], cmp)` / `[3 1 2].sort(cmp)` | `Sort.quick cmp/v [3 1 2]` | boru has no call/method syntax. |
 | `Sort.quick nums Sort.by-number/v` (receiver between verb and comparator) | `Sort.quick Sort.by-number/v nums` (receiver LAST) | Receiver-first-all-forward matches no signature; `boru check` reports `uncalled_function` and the run is blocked. |
-| `Sort.quick Sort.by-number nums` / `(Sort.by-number Sort.reverse)` | `Sort.by-number/v` | A bare name holding a function **calls** it (`uncalled_function: call to 'by-number' matched no signature`). Every comparator argument carries `/v` — namespace members included. (A few positions still tolerate a bare namespace member on 64c5ab2; don't rely on it.) |
+| `Sort.quick Sort.by-number nums` / `(Sort.by-number Sort.reverse)` | `Sort.by-number/v` | A bare name holding a function **calls** it (`boru check`: `uncalled_function` — `call to 'quick-sort' …` / `call to 'by-number' matched no signature`). Every comparator argument carries `/v` — namespace members included. (A few positions still tolerate a bare namespace member on 64c5ab2; don't rely on it.) |
 | `Sort.quick mycmp nums` / `Sort.quick cmp nums` | `mycmp/v`, `cmp/v` | Same rule for your own words and the built-in. |
 | `Sort.by-number/r`, `mycmp/r` | `/v` | `/r` was renamed `/v` (ADR-011); `mycmp/r` is now an `undefined word`. |
 | `xs Sort.quick Sort.by-number/v` followed by a literal on the same statement | add `end`, or use forward `Sort.quick Sort.by-number/v xs` | In piping the call can collect a following literal as its list. |
