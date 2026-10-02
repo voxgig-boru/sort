@@ -157,32 +157,41 @@ print (r.ok)
 **Workaround:** `sort_prop_spec` binds `def by-num (Sort.by-number/v)` at
 module level and its properties pass `by-num/v`.
 
-**3. Runtime callbacks: a bare member call in a `Test.check-prop`
+**4. Runtime callbacks: a bare member call in a `Test.check-prop`
 generator (2026-10-02, boru-lang/boru#528).** Every suite compiled as a
 program, but `boru -compile-report test/sort_prop_test.aql` listed one
 runtime callback that declined its compile stamp and ran on the
 interpreter: the P7 generator `[ r.int 2 99 ]` @ 187:3 — "closure
 storedfn$body: unapplied fn-value in body residual (dynamic apply not
-lowered)" (boru COMPILABLE-SUBSET §5). It is now `[ (r.int 2 99) ]`, the
-member call grouped in parens, commented at the site. A scratch harness
-ran the old and new generators through `Test.check-prop` with a property
-that prints every value, for seeds 2, 7 and 13 at 25 runs each, plus a
-failing property with shrinking on: the outputs, result maps included,
-are byte-identical, and the original property body and its
-`20 2 0` arguments are unchanged. Declines across the five suites: **1 →
-0** (`sort_prop_test` 1 → 0; the others were already 0). No site was
-left; the `iota (r.int …) each [ var [[i] r.int … ] ]` generators were
-already stamped. `sort_prop_spec`'s `Test.prop` generators have the same
-shape and never declined.
+lowered)" (boru COMPILABLE-SUBSET §5, recorded in #528). It is now
+`[ (r.int 2 99) ]`, the member call grouped in parens, commented at the
+site. A scratch harness ran the old and new generators through
+`Test.check-prop` with a property that prints every value, for seeds 2, 7
+and 13 at 25 runs each, plus a failing property with shrinking on: the
+outputs, result maps included, are byte-identical, and the original
+property body and its `20 2 0` arguments are unchanged. An independent
+re-run (seeds 4, 17, 42, 250, 1000 and 99999 at 30 runs each, the P7 body
+plus a shrinking probe; and a Go probe over seeds 19, 33 and 77 on both
+the interpreter and the compiled lane) gave identical output too. Note
+that `Test.check-prop` seeds run *i* with seed + *i* — seed 5's first
+value is seed 4's second — so nearby seeds share most of their values.
+Declines across the five suites: **1 → 0** (`sort_prop_test` 1 → 0; the
+others were already 0). No site was left: in the `iota (r.int …) each
+[ var [[i] r.int … ] ]` generators the only runtime callbacks are the
+`each` bodies, and those were already stamped. `sort_prop_spec`'s
+`Test.prop` generators have the same `iota … each` shape and never
+declined.
 
 ### Upstream defects that do not affect this library
 
 - A `Test.check-prop` called **inside a fn body** whose property body
-  builds an interpolated template from its bound value is refused at
-  compile time, while the interpreter runs it (found in the scratch
-  harness for workaround 3; confirmed on both lanes with a Go probe;
-  `boru check` reports 0 errors). The suites call `Test.check-prop` at top
-  level, where the same body compiles:
+  contains an interpolated template is refused at compile time, while the
+  interpreter runs it. Any `${…}` triggers it, whether it reads the bound
+  value (`` `g ${k}` ``) or a property-local `def`; a template with no
+  interpolation, or `k convert String`, compiles. It was found in the
+  scratch harness for workaround 4 and confirmed on both lanes with a Go
+  probe; `boru check` reports 0 errors. The suites call
+  `Test.check-prop` at top level, where the same body compiles:
 
   ```boru
   import "boru:test"

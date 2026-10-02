@@ -57,7 +57,7 @@ mistakes to avoid. Every example there was executed against boru main @
 - boru-runtime gotchas discovered while building this library are captured
   inline as code comments in `sort.aql`, in AGENTS.md's "Common mistakes",
   and in `DX-REPORT.md` — whose "Migration to boru main @ 64c5ab2" section
-  lists the three open upstream defects `sort.aql` / the suites work around
+  lists the four open upstream defects `sort.aql` / the suites work around
   (each commented at its site; remove the workaround when fixed upstream).
 - The library tracks boru **main** (no pinned commit): CI, the hook and the
   gate all resolve main HEAD at run time. Last verified against boru main
