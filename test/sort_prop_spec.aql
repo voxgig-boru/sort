@@ -12,10 +12,18 @@
 # (the input list). PROP-BODY takes that list and returns a Boolean.
 #
 # Run:
-#   aql test/sort_prop_spec.aql
+#   boru test/sort_prop_spec.aql
 
-import "boru:test" end
-import "./sort.aql" end
+import "boru:test"
+import "../sort.aql"
+
+
+# Works around a boru compile defect (boru main @ 64c5ab2): a `Test.prop`
+# body that reads a NAMESPACE member by `/v` (`Sort.by-number/v`) is
+# refused — "code-body word test-prop (Stage 2)" — while a module-level
+# binding read by `/v` compiles. So the property bodies pass `by-num/v`.
+# Go back to `Sort.by-number/v` inline when the defect is fixed upstream.
+def by-num (Sort.by-number/v)
 
 
 # --- reporting helper (one PropertyResult → a pass/fail line) --------
@@ -40,23 +48,23 @@ def specs [
   (Test.prop "all-comparison-sorts-agree-with-merge"
     [ iota (r.int 0 7) each [ var [[i] r.int 0 12 ] ] ]
     [ var [[lst]
-        def want (lst Sort.merge Sort.by-number end)
+        def want (lst Sort.merge by-num/v end)
         def results [
-          (lst Sort.bubble    Sort.by-number end)
-          (lst Sort.insertion Sort.by-number end)
-          (lst Sort.selection Sort.by-number end)
-          (lst Sort.gnome     Sort.by-number end)
-          (lst Sort.cocktail  Sort.by-number end)
-          (lst Sort.comb      Sort.by-number end)
-          (lst Sort.shell     Sort.by-number end)
-          (lst Sort.odd-even  Sort.by-number end)
-          (lst Sort.cycle     Sort.by-number end)
-          (lst Sort.pancake   Sort.by-number end)
-          (lst Sort.bitonic   Sort.by-number end)
-          (lst Sort.quick     Sort.by-number end)
-          (lst Sort.heap      Sort.by-number end)
-          (lst Sort.intro     Sort.by-number end)
-          (lst Sort.tim       Sort.by-number end)
+          (lst Sort.bubble    by-num/v end)
+          (lst Sort.insertion by-num/v end)
+          (lst Sort.selection by-num/v end)
+          (lst Sort.gnome     by-num/v end)
+          (lst Sort.cocktail  by-num/v end)
+          (lst Sort.comb      by-num/v end)
+          (lst Sort.shell     by-num/v end)
+          (lst Sort.odd-even  by-num/v end)
+          (lst Sort.cycle     by-num/v end)
+          (lst Sort.pancake   by-num/v end)
+          (lst Sort.bitonic   by-num/v end)
+          (lst Sort.quick     by-num/v end)
+          (lst Sort.heap      by-num/v end)
+          (lst Sort.intro     by-num/v end)
+          (lst Sort.tim       by-num/v end)
         ]
         def ok (flex [true])
         def _ (results each [ var [[r] if ((r deq want) not) [ ok set 0 false end drop 0 ] [0] ] ])
@@ -67,7 +75,7 @@ def specs [
   (Test.prop "distribution-sorts-agree-with-merge"
     [ iota (r.int 0 8) each [ var [[i] r.int 0 40 ] ] ]
     [ var [[lst]
-        def want (lst Sort.merge Sort.by-number end)
+        def want (lst Sort.merge by-num/v end)
         def results [
           (lst Sort.counting   end)
           (lst Sort.pigeonhole end)
@@ -84,14 +92,14 @@ def specs [
   # The output of a sort is ordered.
   (Test.prop "output-is-ordered"
     [ iota (r.int 0 14) each [ var [[i] r.int 0 50 ] ] ]
-    [ var [[lst] (lst Sort.quick Sort.by-number end) Sort.is-sorted Sort.by-number end ] ])
+    [ var [[lst] (lst Sort.quick by-num/v end) Sort.is-sorted by-num/v end ] ])
 
   # Sorting is idempotent.
   (Test.prop "sort-is-idempotent"
     [ iota (r.int 0 14) each [ var [[i] r.int 0 50 ] ] ]
     [ var [[lst]
-        def once  (lst  Sort.merge Sort.by-number end)
-        def twice (once Sort.merge Sort.by-number end)
+        def once  (lst  Sort.merge by-num/v end)
+        def twice (once Sort.merge by-num/v end)
         (once deq twice)
     ] ])
 
@@ -99,8 +107,8 @@ def specs [
   (Test.prop "reverse-comparator-reverses-output"
     [ iota (r.int 0 12) each [ var [[i] r.int 0 100 ] ] ]
     [ var [[lst]
-        def asc  (lst Sort.heap Sort.by-number end)
-        def desc (lst Sort.heap (Sort.by-number Sort.reverse) end)
+        def asc  (lst Sort.heap by-num/v end)
+        def desc (lst Sort.heap (by-num/v Sort.reverse) end)
         (desc deq (asc reverse))
     ] ])
 
@@ -119,7 +127,12 @@ def _ (specs each [
 
 # --- summary -------------------------------------------------------
 
-"---" print
-"fail count: " print Test.fail-count end print
-0 Test.fail-count end Assert.equal end
-"all green" print
+# One value per `print`, in forward form, and the final assertion with its
+# operands written forward: the old chained spelling (`"---" print "fail
+# count: " print Test.fail-count end print`, then `0 Test.fail-count end
+# Assert.equal end`) evaluates out of source order on boru main, dropped
+# the "---" line, and compared the fail count against a stray stack value.
+print ("---")
+print (`fail count: ${(Test.fail-count)}`)
+Assert.equal 0 (Test.fail-count)
+print ("all green")

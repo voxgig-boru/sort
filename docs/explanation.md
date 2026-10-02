@@ -12,11 +12,11 @@ done*, the [How-to guides](how-to.md).
 It is a catalogue of sorting algorithms — every well-known comparison
 sort, the main distribution sorts, and a few joke sorts — over every boru
 type, driven by a single small abstraction: the **comparator**. You pick
-an algorithm and an ordering, write them in boru's data-first shape, and
-get back a new sorted list:
+an algorithm and an ordering, write them in boru's forward shape — the
+list, the call's receiver, last — and get back a new sorted list:
 
 ```
-list Sort.<algo> comparator end   →   a new sorted List
+Sort.<algo> comparator list   →   a new sorted List
 ```
 
 The design goal is that the *ordering* and the *algorithm* are
@@ -65,9 +65,10 @@ def by-length fn [
 
 Two conventions are worth internalising. First, the body is written in
 terms of `a` (the *earlier* item) and `b` (the *later* one), so "`a`
-before `b` ⇒ negative" reads naturally; boru's rule that the first
-signature parameter is the top of the stack is what makes `a` the earlier
-item when a sort invokes `xi xj comp`. Second, the built-in comparators
+before `b` ⇒ negative" reads naturally; boru's binding rule — with every
+operand on the stack, the first signature parameter takes the top of the
+stack — is what makes `a` the earlier item when a sort invokes
+`xi xj comp`. Second, the built-in comparators
 defer to `cmp` rather than computing `a - b`. A three-way `cmp` never
 subtracts, so there is no risk of integer overflow flipping a comparison —
 a classic bug in hand-rolled numeric comparators.
@@ -95,7 +96,7 @@ choice:
 
 The practical consequence for callers is the one rule from the
 [Tutorial](tutorial.md#step-5--sorts-return-a-new-list): always **bind the
-result** (`def sorted (xs Sort.quick … end)`). Reading the original
+result** (`def sorted (Sort.quick … xs)`). Reading the original
 variable after "sorting" it gives you the original, unsorted list, because
 nothing wrote to it.
 
@@ -125,66 +126,82 @@ and the library ships both.
 The comparator abstraction is clean in principle, but making it work in
 boru leans on a few language facts worth understanding.
 
-### Postfix, terminated calls
+### Forward calls, receiver last
 
 boru is not C/Python/JS: there is no `sort(list, cmp)` and no
-`list.sort(cmp)`. A call is **data first, verb next, arguments after**,
-terminated with `end` (or wrapped in parens):
+`list.sort(cmp)`. A call binds its arguments **in signature order** — the
+tokens written after the word fill the leading parameters, and whatever is
+left comes off the stack. Every `Sort` word takes the list, its
+*receiver*, as the **last** parameter, so the canonical call is verb
+first, list last:
 
 ```boru
-list Sort.quick Sort.by-number end
+Sort.quick Sort.by-number/v [3 1 2]
 ```
 
-Words dispatch forward — they look ahead and collect arguments — so the
-terminator is load-bearing. Drop the `end` and `Sort.quick` swallows
-whatever token follows it as if it were the comparator, giving a wrong
-result or a dispatch error. The `(… )` parentheses count as a terminator,
-which is why `(xs Sort.quick Sort.by-number)` works too.
+Because the receiver is last, the piping form — the list flowing in from
+the left, `[3 1 2] Sort.quick Sort.by-number/v end` — binds the same
+parameters. What does *not* work is the receiver first in an all-forward
+call (`Sort.quick [3 1 2] Sort.by-number/v`): the list lands in the
+comparator slot, no signature matches, and boru's pre-flight check rejects
+the program before it runs. The `(… )` parentheses terminate a call, which
+is why `(Sort.quick Sort.by-number/v xs)` is the usual way to use a sort's
+result as a value.
 
-### Function values and `/r`
+### Function values and `/v`
 
 A comparator has to be passed *as a value* — handed to the sort to call
-later — not invoked at the call site. boru's default is to invoke: a bare
-word runs. The `/r` suffix is what defers it, parking the word as a value
-instead of calling it. So your own comparator and the built-in `cmp` are
-passed `mycmp/r`, `cmp/r`. The comparators in the `Sort` namespace
-(`Sort.by-number`, …) are *already* values in the namespace map, so they
-are passed bare — adding `/r` to them is the common mistake in the other
-direction.
+later — not invoked at the call site. boru's rule (ADR-011) is that a
+bare name holding a function **calls** it, wherever it appears; the `/v`
+suffix suppresses the call and yields the function value instead. So
+**every** comparator argument carries it: the namespace comparators
+(`Sort.by-number/v`), your own words (`mycmp/v`) and the built-in
+(`cmp/v`) alike. The combinators follow the same rule on the way in —
+`(Sort.reverse Sort.by-number/v)` — and their result is placed by the
+parentheses. (Older builds spelled the modifier `/r` and treated a
+namespace member as an already-parked value that went bare; boru renamed
+`/r` to `/v` on 2026-08-19 and dropped the bare-member exception.)
 
-### The single-module requirement
+### One module, still
 
-A comparator is a function value, and when a sort invokes it, boru resolves
-the comparator's free words — any helper it calls — in **the module that
-runs it**. The library's `Sort.natural`, for instance, calls a private
-digit-run scanner; that scanner has to be visible where `natural` actually
-executes. This is why the comparators and the algorithms live in the same
-single module: a comparator's helpers must resolve in the running module,
-so the library keeps them together rather than splitting orderings and
-algorithms across files. (For your own comparators the same fact is
-benign: define the comparator and any helper it uses in the script that
-runs the sort, and they resolve.)
+Comparators and algorithms live in one file, `sort.aql`. The original
+reason was that boru resolved a function value's free words in **the
+module that ran it**, so a comparator calling a private helper (the
+`natural` digit-run scanner, say) failed when a sort in another module
+invoked it. boru fixed that (a function value now resolves its free words
+in the module that *defined* it), but one corner still breaks: a
+comparator that reads an **imported namespace** directly
+(`StringUtil.lower`) raises `undefined word: StringUtil` when it is
+applied as a function value on behalf of a caller that did not import
+`boru:string-util` itself. `Sort.case-insensitive` therefore routes that
+read through a private helper (`fold-case`), and the library stays one
+file. For your own comparators: define the comparator and its helpers in
+the script that runs the sort, and they resolve.
 
 ### Threading comparators through recursion
 
 The divide-and-conquer sorts (`quick`, `merge`, `heap`, `intro`,
 `bitonic`, `tim`, and the recursive joke sorts) recurse, and each
 recursive call needs the comparator. It is threaded directly as a
-`comp:Function` parameter: each frame invokes it bare (`xi xj comp`) and
-forwards it to the recursive calls with `comp/r`. (An earlier boru build
-had a one-shot restriction on re-parking a function parameter with `/r`,
-which forced a one-cell FlexList "box" workaround; that bug is fixed
-upstream, so the box is gone.)
+`comp:Function` parameter and forwarded to the recursive calls as
+`comp/v`. A helper that forwards `comp/v` also *invokes* it through the
+value — `xi xj comp/v apply`, the same call as a bare `xi xj comp` —
+because boru main's compiler refuses (or, reached from inside an `each`
+body, mis-compiles) a body that reads one Function parameter both bare and
+by `/v`. Sorts that never forward the comparator invoke it bare. The
+workaround is commented at each site and recorded in `DX-REPORT.md`.
 
-### Bounded loops instead of `while`
+### Bounded loops
 
-boru offers no `while`, so the data-dependent loops (gnome's cursor walk,
-comb's gap shrink, bogo's shuffle, …) are written as bounded `iota` loops
-with an explicit state cell, where the bound is a proven worst-case step
-count for that algorithm. The loop always reaches the sorted state and
-then idles for the remaining iterations. This is why, for example, `bogo`
-has a hard cap and raises `bogo_giveup` rather than looping forever — there
-is no unbounded loop to run.
+When the library was written boru had no `while`, so the data-dependent
+loops (gnome's cursor walk, comb's gap shrink, bogo's shuffle, …) are
+bounded `iota` loops with an explicit state cell, where the bound is a
+proven worst-case step count for that algorithm. The loop always reaches
+the sorted state and then idles for the remaining iterations. boru has
+since grown `while [cond] [body]`; the bounded loops are kept because they
+are correct, compile, and make every algorithm's worst case explicit. It
+is also why `bogo` has a hard cap and raises `bogo_giveup` rather than
+looping forever.
 
 ---
 
@@ -215,7 +232,8 @@ The distribution sorts validate their input and `bogo` enforces its cap by
 `raise`-ing coded errors: `bad_input` for a non-Integer / negative /
 out-of-range element, `bogo_giveup` for an exhausted shuffle budget.
 Handlers catch them with `do […] error […]` and read `code` / `message`
-off the Error value. Coded errors let a caller distinguish "you gave me the
+off the Error value (`e.code` once bound; `dot code` or `get "code"`
+inside the handler). Coded errors let a caller distinguish "you gave me the
 wrong kind of data" from a bug, and dispatch on the code with `case`.
 
 ---

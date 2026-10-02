@@ -16,43 +16,60 @@ The module exports a single namespace, `Sort`. Import it with:
 import "./sort.aql"
 ```
 
-(No `end` is required after `import` on the pinned build; a trailing `end`
-is harmless.) A consuming script does **not** need to import
-`boru:string-util` or `boru:math-util` itself — `sort.aql` imports them
-internally.
+A relative import path resolves against the **directory of the importing
+file** (for `boru X` and `boru check X` alike), not the working directory —
+a script in `test/` writes `import "../sort.aql"`. No `end` is required
+after `import` (a trailing `end` is harmless). A consuming script does
+**not** need to import `boru:string-util` or `boru:math-util` itself —
+`sort.aql` imports them internally.
+
+Verified against boru main @ `64c5ab2` (2026-10-01).
 
 ---
 
 ## Calling convention
 
-Every operation is a forward-dispatched word and must be terminated with
-`end` (or wrapped in parentheses) at the call site, e.g.
-`xs Sort.quick Sort.by-number end` or `(xs Sort.quick Sort.by-number)`.
-Without a terminator the word collects the following token as an argument.
-This is general boru forward-precedence behaviour, not specific to this
-module.
-
-The shape is **data first**, then the verb, then the comparator (for the
-comparison and joke sorts; the distribution sorts take none):
+A call binds its arguments **in signature order**: the tokens written
+after the word fill the leading parameters, and whatever is left comes off
+the stack. Every `Sort` word takes the list — the **receiver** — as its
+**last** parameter, so the canonical form is **forward**, verb first and
+list last; the **piping** form, list first, binds identically:
 
 ```
-list Sort.<algo> comparator end   →   List (new, sorted; input unchanged)
-list Sort.<algo>            end    →   List       (distribution sorts)
+Sort.<algo> comparator list        →   List (new, sorted; input unchanged)
+Sort.<algo> list                   →   List (distribution sorts)
+list Sort.<algo> comparator end    →   the same, piping form
 ```
+
+The forward form is saturated by the trailing list, so a closing paren is
+all the terminator it needs. In the piping form, end the call with `end`
+(or wrap it in parens) so the trailing comparator cannot collect a
+following literal as its list. Receiver-first-all-forward —
+`Sort.<algo> list comparator` — matches no signature; `boru check` (which
+`boru X` runs first) reports
+`uncalled_function: call to 'quick-sort' matched no signature`.
 
 ### Passing a comparator
 
-| You want to use… | Write it as | Why |
-|---|---|---|
-| a comparator from this namespace | `Sort.by-number` (bare) | already a value in the namespace map |
-| your own comparator word | `mycmp/r` | `/r` hands the word over as a value instead of invoking it |
-| the built-in `cmp` | `cmp/r` | same — `/r` defers the call |
+A bare name that holds a function **calls** it wherever it appears (boru
+ADR-011), so a comparator passed as an argument — to a sort or to a
+combinator — always carries **`/v`**, which hands over the function value:
+
+| You want to use… | Write it as |
+|---|---|
+| a comparator from this namespace | `Sort.by-number/v` |
+| your own comparator word | `mycmp/v` |
+| the built-in `cmp` | `cmp/v` |
+| a comparator built by a combinator | `(Sort.reverse Sort.by-number/v)` — the parens place the value |
+| a comparator bound with `def` | `desc/v` (after `def desc (Sort.reverse Sort.by-number/v)`) |
+
+`/v` replaced the old `/r` modifier (ADR-011, renamed 2026-08-19).
 
 ### No mutation
 
 Every algorithm returns a **new** sorted `List`; the input `List` is never
 modified. This is the opposite of an in-place library. Always bind the
-result (`def s (xs Sort.quick … end)`); the original is unchanged.
+result (`def s (Sort.quick … xs)`); the original is unchanged.
 
 ---
 
@@ -65,36 +82,43 @@ second. Only the sign matters — the same contract as the built-in `cmp`.
 The defaults defer to `cmp` (a three-way compare that never subtracts, so
 there is no integer-overflow risk).
 
-| Call | Returns | Order |
+Pass each one to a sort as `Sort.<name>/v`. Applied directly, the stack
+form reads naturally — `a b Sort.by-number end` is negative when `a`
+sorts before `b` (`1 2 Sort.by-number end` is `-1`); the forward form
+binds in signature order (`b` first), so `Sort.by-number 1 2` is `1`.
+
+| Call (stack form) | Returns | Order |
 |------|---------|-------|
 | `a b Sort.by-number end` | `Integer` | ascending numeric (Integer or Float) |
 | `a b Sort.by-string end` | `Integer` | lexicographic (code-point) |
 | `a b Sort.by-boolean end` | `Integer` | `false` before `true` |
-| `a b Sort.by-generic end` | `Integer` | polymorphic via `cmp` |
+| `a b Sort.by-generic end` | `Integer` | `cmp` — within one type family; a mixed pair (`3` vs `"a"`) raises `incomparable` |
 | `a b Sort.natural end` | `Integer` | alphanumeric: embedded digit runs compare numerically, so `"file2" < "file10"` |
 | `a b Sort.case-insensitive end` | `Integer` | case-folded lexicographic |
 
 ### Combinators
 
 Each returns a **new** comparator (a closure over its argument), so they
-compose — e.g. `(length-of/r Sort.by-key) Sort.reverse`.
+compose — e.g. `(Sort.reverse (Sort.by-key length-of/v))`. The argument
+going in carries `/v`; wrap the call in parens to place the resulting
+comparator.
 
 | Call | Args | Returns | Effect |
 |------|------|---------|--------|
-| `comp Sort.reverse end` | `comp:Comparator` | `Comparator` | reverses `comp` (descending) |
-| `keyfn Sort.by-key end` | `keyfn:Function` | `Comparator` | orders items by the key `keyfn` extracts, compared with `cmp` |
+| `(Sort.reverse comp/v)` | `comp:Comparator` | `Comparator` | reverses `comp` (descending) |
+| `(Sort.by-key keyfn/v)` | `keyfn:Function` | `Comparator` | orders items by the key `keyfn` extracts, compared with `cmp` |
 
 ```boru
-print (([3 1 2] Sort.quick (Sort.by-number Sort.reverse) end)) end   # => [3, 2, 1]
+print (Sort.quick (Sort.reverse Sort.by-number/v) [3 1 2])     # => [3, 2, 1]
 def len-of fn [[s:Any] [Integer] [ s size ]]
-print ((["bbb" "a" "cc"] Sort.merge (len-of/r Sort.by-key) end)) end # => ["a", "cc", "bbb"]
+print (Sort.merge (Sort.by-key len-of/v) ["bbb" "a" "cc"])      # => ["a", "cc", "bbb"]
 ```
 
 ---
 
 ## Comparison sorts
 
-`list Sort.<algo> comparator end → List`. All produce the same ordering
+`Sort.<algo> comparator list → List`. All produce the same ordering
 for a given comparator; they differ in stability and cost. *Stable* means
 equal elements keep their input order. Complexities are average-case
 unless noted; `n` is the list length.
@@ -124,15 +148,15 @@ input into a fresh working FlexList (the input is never mutated) even when
 the underlying ordering is "in place" on that copy.
 
 ```boru
-print (([5 3 8 1] Sort.quick Sort.by-number end)) end   # => [1, 3, 5, 8]
-print (([5 3 8 1] Sort.sort  Sort.by-number end)) end   # => [1, 3, 5, 8]
+print (Sort.quick Sort.by-number/v [5 3 8 1])   # => [1, 3, 5, 8]
+print (Sort.sort  Sort.by-number/v [5 3 8 1])   # => [1, 3, 5, 8]
 ```
 
 ---
 
 ## Distribution sorts
 
-`list Sort.<algo> end → List`. These take **no comparator** and order
+`Sort.<algo> list → List`. These take **no comparator** and order
 **Integers ascending** by counting or bucketing rather than comparing.
 `k` is the value range (`max − min + 1`); `d` is the number of digits in
 the maximum.
@@ -143,7 +167,7 @@ the maximum.
 | `pigeonhole` | O(n + k) | O(n + k) | Integers; negatives OK |
 | `radix-lsd`  | O(d·(n + 10)) | O(n) | **non-negative** Integers (base 10), stable |
 | `radix-msd`  | O(d·(n + 10)) | O(n) | **non-negative** Integers (base 10), recursive |
-| `bucket`     | O(n + k) average | O(n) | Integers; value-range buckets, insertion-sorted then gathered |
+| `bucket`     | O(n + k) average | O(n) | Integers (negatives OK); value-range buckets, insertion-sorted then gathered |
 | `bead`       | O(n·max) | O(n·max) | **non-negative** Integers (gravity sort) |
 
 `counting` and `pigeonhole` raise `bad_input` on a non-Integer element or
@@ -151,25 +175,25 @@ a value range over 1e8. The radix family and `bead` raise `bad_input` on a
 non-Integer or a **negative** element.
 
 ```boru
-print (([170 45 75 90 2 802] Sort.radix-lsd end)) end   # => [2, 45, 75, 90, 170, 802]
-print (([5 -2 8 -1 0] Sort.counting end)) end           # => [-2, -1, 0, 5, 8]
+print (Sort.radix-lsd [170 45 75 90 2 802])   # => [2, 45, 75, 90, 170, 802]
+print (Sort.counting [5 -2 8 -1 0])           # => [-2, -1, 0, 5, 8]
 ```
 
 ---
 
 ## Joke / educational sorts
 
-`list Sort.<algo> comparator end → List`. Correct, but deliberately
+`Sort.<algo> comparator list → List`. Correct, but deliberately
 inefficient — for demonstration, not production.
 
 | Algorithm | Time | Notes |
 |-----------|------|-------|
 | `stooge` | O(n^2.71) | recursive; sorts thirds in a fixed pattern |
 | `slow`   | superpolynomial | "multiply and surrender"; recursive |
-| `bogo`   | unbounded (capped) | shuffle-until-sorted with a deterministic LCG and a hard cap; raises `bogo_giveup` past the cap — use only on tiny inputs |
+| `bogo`   | unbounded (capped) | shuffle-until-sorted with a deterministic LCG and a hard cap of 300,000 shuffles; raises `bogo_giveup` past the cap (on boru main @ 64c5ab2 a 10-element input takes about two minutes to give up) — use only on tiny inputs |
 
 ```boru
-print (([2 1] Sort.bogo Sort.by-number end)) end   # => [1, 2]
+print (Sort.bogo Sort.by-number/v [2 1])   # => [1, 2]
 ```
 
 ---
@@ -182,27 +206,33 @@ Test whether a list is already ordered under a comparator.
 
 | | |
 |--|--|
-| **Call**    | `list Sort.is-sorted comparator end` |
-| **Stack in**| a `List`, then a comparator |
+| **Call**    | `Sort.is-sorted comparator list` (piping: `list Sort.is-sorted comparator end`) |
+| **Args**    | `comp:Comparator`, then `lst:List` (the receiver, last) |
 | **Returns** | `Boolean` — `true` iff `list` is ordered under the comparator |
 
 ```boru
-print (([1 2 3] Sort.is-sorted Sort.by-number end)) end   # => true
-print ((["c" "a" "b"] Sort.is-sorted Sort.by-string end)) end   # => false
+print (Sort.is-sorted Sort.by-number/v [1 2 3])         # => true
+print (Sort.is-sorted Sort.by-string/v ["c" "a" "b"])   # => false
 ```
 
 ---
 
 ## Errors at a glance
 
-All failures raise coded errors; catch with `do […] error […]` and read
-`e get code` / `e get message` (dispatch on several codes with `case`).
+All failures raise coded errors; catch with `do […] error […]`. Bind the
+result and read `e.code` / `e.message`; inside the handler, where the
+Error is on the stack, read `dot code` or `get "code"` (`get` evaluates
+its key, so a bare `get code` is an `undefined word`). Dispatch on
+several codes with `case`.
 
 | Code | Raised by | Situation |
 |------|-----------|-----------|
 | `bad_input` | the distribution sorts | a non-Integer element; a negative element to `radix-lsd`/`radix-msd`/`bead`; or a value range over 1e8 for `counting`/`pigeonhole` |
 | `bogo_giveup` | `bogo` | shuffle cap exceeded without reaching sorted order |
 
-A missing `end` after a `Sort.*` call is not a module error but a general
-boru dispatch problem — the word collects the following token (add `end` or
-parens).
+A missing `end` after a piping-form `Sort.*` call is not a module error
+but a general boru dispatch matter — the word can collect a following
+literal (add `end` or parens, or use the forward form). A wrong argument
+order or a bare (un-`/v`'d) comparator is caught statically: `boru check`
+reports `uncalled_function: … matched no signature` and `boru X` does not
+run.

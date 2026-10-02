@@ -20,7 +20,7 @@ several modules/namespaces.
 
 ```
 <lib>.aql                     the library — one module exporting one namespace
-aql.jsonic                    package manifest (name, main, files)
+boru.jsonic                   package manifest (name, main, files)
 api.json                      machine-readable API manifest (for agents)
 AGENTS.md                     the canonical agent/human calling guide
 CLAUDE.md                     Claude Code entrypoint; @-imports AGENTS.md
@@ -30,7 +30,7 @@ LICENSE                       MIT
 .gitignore
 .claude/
   settings.json               registers the SessionStart hook
-  hooks/session-start.sh      builds boru @ the pinned ref in remote sessions
+  hooks/session-start.sh      builds boru @ main HEAD in remote sessions
   skills/<lib>-aql/SKILL.md   portable, auto-loaded agent skill (canonical copy)
 .claude-plugin/
   marketplace.json            this repo is also a plugin marketplace
@@ -38,9 +38,11 @@ plugins/<lib>-aql/
   .claude-plugin/plugin.json  plugin manifest
   skills/<lib>-aql/SKILL.md   BUNDLED copy of the skill (must equal the canonical one)
 .github/workflows/
-  test.yml                    GitHub Actions: build boru, run every suite + divergence + consistency jobs
+  test.yml                    GitHub Actions: build boru, run every suite + the gate (divergence) + consistency jobs
 docs/                         Diátaxis docs: tutorial, how-to, reference, explanation
+bench/                        performance baseline (run.sh, BASELINE.md)
 test/
+  divergence/run.sh           the gate: every suite runs green + boru check clean (CI runs it)
   <lib>_unit_test.aql         example-based unit tests — imperative (Test.test)
   <lib>_unit_spec.aql         example-based unit tests — declarative spec
   <lib>_prop_test.aql         property tests — imperative (Test.check-prop)
@@ -63,11 +65,17 @@ In this template, `<lib>` is `sort` and `<Ns>` is `Sort`: the library is
   the variant name for a multi-module one (e.g. `radix_unit_test.aql`). Every
   assertion-bearing suite ends with the same tail and prints `all green`;
   smoke suites carry no assertion (pass = no error).
-- **Single source of truth for the pinned boru commit:** the CI workflow’s
-  `env.BORU_REF` (full 40-char SHA). The `consistency` CI job fails if
-  `.claude/hooks/session-start.sh`’s `BORU_REF` or `api.json`’s `aql_ref`
-  prefix drift from it. Bump the ref in the workflow, then update those two
-  and re-run the suites.
+- **boru version: track `main`.** The CI workflow, the SessionStart hook and
+  `test/divergence/run.sh` all resolve boru-lang/boru `main` HEAD at run
+  time (no pinned commit). `api.json`’s `verified_against` records the last
+  commit the docs were re-verified on; bump it (and the "verified against"
+  lines in `AGENTS.md`, `CLAUDE.md` and the skill) when you re-verify.
+- **One execution path.** `boru X` checks, compiles to bytecode and runs on
+  the VM — there is no interpreter and no `--compile` family of flags, so
+  "the suite runs" means "the suite fully compiles". The gate
+  (`test/divergence/run.sh`) requires every suite to exit 0 and print
+  `all green`, and `boru check` to report 0 errors on every suite and
+  module.
 - **Agent docs, layered (kept self-contained, guarded against drift):**
   `AGENTS.md` is the canonical prose guide; `CLAUDE.md` `@`-imports it;
   `.claude/skills/<lib>-aql/SKILL.md` is a strict condensation that auto-loads;
@@ -75,7 +83,7 @@ In this template, `<lib>` is `sort` and `<Ns>` is `Sort`: the library is
   the prose signature source. The bundled plugin SKILL.md must stay byte-equal
   to the canonical one (CI checks this).
 - **Docs follow Diátaxis** (tutorial / how-to / reference / explanation), with
-  `docs/how-to.md#install-and-run-aql` as the canonical install anchor and
+  `docs/how-to.md#install-and-run-boru` as the canonical install anchor and
   `docs/how-to.md#run-the-tests` as the canonical test anchor (README links
   to both).
 - **`.aql` module header** opens with: one-line summary, the exported
@@ -92,12 +100,12 @@ here is `sort` / `Sort`.
 
 1. **Rename the module.** `git mv sort.aql <lib>.aql`; rewrite it for your
    data structure, exporting one `<Ns>` namespace. Keep the header shape.
-2. **`aql.jsonic`** — set `name`, `main: <lib>.aql`, `files: [<lib>.aql]`.
+2. **`boru.jsonic`** — set `name`, `main: <lib>.aql`, `files: [<lib>.aql]`.
 3. **Tests.** `git mv` the five `sort_*` files to `<lib>_*`; rewrite their
    bodies. Keep the standard tail + `all green`.
 4. **`api.json`** — set `name`, `description`, the `Sort` → `<Ns>` namespace,
    and `word_specs` with your exact call shapes, arg order, and return types.
-   Leave `aql_ref` as the short prefix of the pinned commit.
+   Set `verified_against` to the boru main commit you verified on.
 5. **`AGENTS.md`** — rewrite the calling convention, API tables, idioms, and
    common mistakes for `<Ns>`. This is the single source agents read.
 6. **`CLAUDE.md`** — update the one-line description; it `@`-imports `AGENTS.md`
@@ -108,11 +116,11 @@ here is `sort` / `Sort`.
    `marketplace.json` + `plugin.json` (name, source, description,
    homepage/repository).
 8. **SessionStart hook** — in `.claude/hooks/session-start.sh`, set the smoke
-   path to `test/<lib>_smoke_test.aql`. Set `BORU_REF` to your pinned commit
-   (same value as the CI workflow’s `env.BORU_REF`).
-9. **CI** — in the workflow (`.github/workflows/test.yml`), set `env.BORU_REF`,
-   list your suites with clear step labels, point the advisory check at
-   `<lib>.aql`, and update the `consistency` job’s plugin paths.
+   path to `test/<lib>_smoke_test.aql` (it builds boru at main HEAD).
+9. **CI** — in the workflow (`.github/workflows/test.yml`), list your suites
+   with clear step labels, point the static check at `<lib>.aql`, and update
+   the `consistency` job’s plugin paths. In `test/divergence/run.sh`, set
+   `MODULES`, `SUITES` and `SMOKE`.
 10. **Docs** — rewrite `docs/*` for your domain; keep the four-mode structure
     and both the install and run-the-tests anchors.
 11. **`README.md`** — rewrite for your library (drop the “Using this as a
