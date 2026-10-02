@@ -157,7 +157,44 @@ print (r.ok)
 **Workaround:** `sort_prop_spec` binds `def by-num (Sort.by-number/v)` at
 module level and its properties pass `by-num/v`.
 
+**3. Runtime callbacks: a bare member call in a `Test.check-prop`
+generator (2026-10-02, boru-lang/boru#528).** Every suite compiled as a
+program, but `boru -compile-report test/sort_prop_test.aql` listed one
+runtime callback that declined its compile stamp and ran on the
+interpreter: the P7 generator `[ r.int 2 99 ]` @ 187:3 — "closure
+storedfn$body: unapplied fn-value in body residual (dynamic apply not
+lowered)" (boru COMPILABLE-SUBSET §5). It is now `[ (r.int 2 99) ]`, the
+member call grouped in parens, commented at the site. A scratch harness
+ran the old and new generators through `Test.check-prop` with a property
+that prints every value, for seeds 2, 7 and 13 at 25 runs each, plus a
+failing property with shrinking on: the outputs, result maps included,
+are byte-identical, and the original property body and its
+`20 2 0` arguments are unchanged. Declines across the five suites: **1 →
+0** (`sort_prop_test` 1 → 0; the others were already 0). No site was
+left; the `iota (r.int …) each [ var [[i] r.int … ] ]` generators were
+already stamped. `sort_prop_spec`'s `Test.prop` generators have the same
+shape and never declined.
+
 ### Upstream defects that do not affect this library
+
+- A `Test.check-prop` called **inside a fn body** whose property body
+  builds an interpolated template from its bound value is refused at
+  compile time, while the interpreter runs it (found in the scratch
+  harness for workaround 3; confirmed on both lanes with a Go probe;
+  `boru check` reports 0 errors). The suites call `Test.check-prop` at top
+  level, where the same body compiles:
+
+  ```boru
+  import "boru:test"
+  def run fn [[] [] [
+    def res (Test.check-prop "p" [ 5 ] [ var [[k] def s `g ${k}` (s size) gt 0 ] ] 2 1 0)
+    print (res "ok" get)
+  ]]
+  run
+  # interpreter: true
+  # compiled:    [boru/compile_failed]: operand of unknown provenance or not
+  #              statically materialisable at test-check-prop
+  ```
 
 - The `boru:test` type-ID collision (`expected X, got X` when a library
   fn returns its own class and `boru:test` is imported first) does not

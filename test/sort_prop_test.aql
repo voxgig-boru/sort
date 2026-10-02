@@ -182,9 +182,13 @@ report (Test.check-prop "merge-is-stable-on-duplicate-keys"
 
 
 # --- P7. Comparator laws --------------------------------------------
+#
+# The generator's member call is grouped — (r.int 2 99): the bare form
+# `[ r.int 2 99 ]` declines its compile stamp and runs on the interpreter
+# (boru COMPILABLE-SUBSET §5, boru-lang/boru#528). Same seeded values.
 
 report (Test.check-prop "natural-orders-numeric-suffixes-by-value"
-  [ r.int 2 99 ]
+  [ (r.int 2 99) ]
   [
     var [[k]
       def small `file${k}`
